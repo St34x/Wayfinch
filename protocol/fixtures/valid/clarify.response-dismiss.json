@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "id": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+  "type": "clarify.response",
+  "ts": "2026-10-03T18:00:00Z",
+  "body": {
+    "clarifyId": "clr-1",
+    "dismiss": true
+  }
+}

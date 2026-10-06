@@ -1,0 +1,47 @@
+# SPDX-License-Identifier: Apache-2.0
+# Example: the glasses platform in a Hermes config.yaml (default profile). Merge the parts you need into your
+# own config; every value is a generic example (example.com host, neutral lane and profile names).
+# Keys, bounds, defaults and status: docs/reference/config.md (pre-alpha: keys marked Planned are accepted and
+# validated but have no effect yet). Check your config with
+#   PYTHONPATH=<plugin dir> python -m glasses.admin config check [--config FILE] [--live]
+# (--live also checks the state dir, free ports, DNS of public_url, lane routes and the routed profiles).
+
+gateway:
+  multiplex_profiles: true
+  # Lane "work" goes to the profile "work"; lanes without a route go to the default profile.
+  profile_routes:
+    - platform: glasses
+      chat_id: "glasses:work"
+      profile: work
+  platforms:
+    glasses:
+      enabled: true
+      extra:
+        host: 127.0.0.1                  # loopback only; your TLS edge proxies to it
+        port: 8765
+        bridge_port: 8766
+        state_dir: ""                    # empty = $HERMES_HOME/glasses (mode 0700)
+        public_url: wss://glasses.example.com/ws
+        lanes: [assistant, work]
+        home_lane: assistant
+        client_cert_header: X-Client-Cert
+        client_cert_encoding: pem-urlescaped   # der-base64 for Caddy
+        long_threshold: 280              # 1-512 characters
+        long_answers:
+          platform: telegram
+        edge:
+          kind: nginx                    # nginx | caddy | other
+          tls_dir: /etc/nginx/glasses
+        # meeting: reserved for meeting mode; leave it out until you use it.
+
+# Each profile a lane is routed to (here the default profile; repeat in profiles/work/config.yaml):
+platform_toolsets:                       # glasses gets exactly the tools the profile has on Telegram
+  glasses: [hermes-telegram]
+  telegram: [hermes-telegram]
+stt:
+  provider: local                        # any provider your Hermes has; voice commands use it
+  language: ""                           # auto-detect; "en" translates other languages into English
+agent:
+  clarify_timeout: 0                     # clarifying questions never expire on the glasses
+approvals:
+  timeout: 300                           # approvals expire and fail closed

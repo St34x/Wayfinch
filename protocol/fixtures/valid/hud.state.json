@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "id": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+  "type": "hud.state",
+  "ts": "2026-10-03T18:00:00Z",
+  "body": {
+    "hermes": "up",
+    "pendingApprovals": 0,
+    "unreadPushes": 2
+  },
+  "seq": 7
+}

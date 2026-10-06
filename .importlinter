@@ -1,0 +1,71 @@
+# SPDX-License-Identifier: Apache-2.0
+# Import boundaries of the Hermes plugin (T1.100; ENGINEERING.md section 1): the pure core never imports
+# an adapter, a framework, a Hermes package or a stdlib I/O module - directly or through another module.
+# Run: make check-imports (lint-imports runs from hermes-plugin/, where the root package `glasses` lives).
+#
+# `source_modules` of the contract `core-purity` is THE core list (one list, two checks: the coverage gate T1.101
+# and tools/quality/check_core_purity.py read it from here). A task that creates a core module adds it in the same
+# change; a listed module that does not exist fails lint-imports ("Module '...' does not exist.").
+# Direct imports of a core module are checked by tools/quality/check_core_purity.py against an ALLOWLIST (fail
+# closed: core modules, glasses.generated, STDLIB_ALLOWLIST there, ratchet entries below), together with what an
+# import graph cannot see (builtin I/O, clock reads, console streams). This forbidden contract covers the
+# transitive part: I/O reached through a generated or ratcheted module.
+# Ratchet: every `ignore_imports` entry sits under a `# T<id>` comment line naming the task that removes it; a stale
+# entry fails lint-imports ("No matches for ignored import ..."). No blank lines inside a list (they break parsing).
+
+[importlinter]
+root_package = glasses
+include_external_packages = True
+
+[importlinter:contract:core-purity]
+name = Pure core imports no adapter, framework, Hermes package or stdlib I/O
+type = forbidden
+source_modules =
+    glasses.hermes_merge
+forbidden_modules =
+    # plugin adapters (listed before they exist, so a new adapter is covered when it is created)
+    glasses.adapter
+    glasses.admin
+    glasses.gate
+    glasses.hermes_facts
+    glasses.registry
+    glasses.server
+    glasses.telegram
+    # frameworks and Hermes packages (Hermes ships a top-level `tools` package; ours is not a package)
+    aiohttp
+    agent
+    gateway
+    hermes_cli
+    hermes_constants
+    run_agent
+    tools
+    # stdlib I/O: network, processes, files, console, clocks, threads, dynamic import
+    asyncio
+    builtins
+    codecs
+    concurrent
+    ctypes
+    fcntl
+    glob
+    http
+    importlib
+    io
+    mmap
+    multiprocessing
+    os
+    pathlib
+    select
+    selectors
+    shutil
+    signal
+    socket
+    sqlite3
+    ssl
+    subprocess
+    sys
+    tempfile
+    threading
+    time
+ignore_imports =
+    # T1.111 (config.py does file I/O; hermes_merge moves to the pure config module created by the split)
+    glasses.hermes_merge -> glasses.config

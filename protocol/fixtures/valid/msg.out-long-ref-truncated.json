@@ -1,0 +1,21 @@
+{
+  "v": 1,
+  "id": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+  "type": "msg.out",
+  "ts": "2026-10-03T18:00:00Z",
+  "body": {
+    "kind": "answer",
+    "text": "Answer cut; full text in telegram.",
+    "chatId": "glasses:assistant",
+    "final": true,
+    "longRef": {
+      "id": "long-1",
+      "channel": "telegram",
+      "profile": "work",
+      "status": "sent",
+      "fullText": "The start of the answer",
+      "truncated": true
+    }
+  },
+  "seq": 7
+}

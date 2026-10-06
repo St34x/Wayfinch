@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "id": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+  "type": "msg.out",
+  "ts": "2026-10-03T18:00:00Z",
+  "body": {
+    "kind": "notice",
+    "text": "Task done",
+    "chatId": "glasses:work",
+    "final": true,
+    "notice": {
+      "kind": "kanban_done",
+      "ref": "t-42"
+    }
+  },
+  "seq": 7
+}

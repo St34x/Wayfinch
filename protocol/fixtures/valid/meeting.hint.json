@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "id": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+  "type": "meeting.hint",
+  "ts": "2026-10-03T18:00:00Z",
+  "body": {
+    "meetingId": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+    "hintId": "h1",
+    "kind": "TERM",
+    "text": "ASR = speech recognition"
+  },
+  "seq": 7
+}

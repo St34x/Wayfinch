@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: Apache-2.0
+# Test-instance config for the DEFAULT profile, rendered to $TEST_HERMES_LOCAL/hh/config.yaml by setup_home.sh:
+# @P@ = TEST_HERMES_LOCAL, @LLM_PORT@ = mock LLM port, @DEFAULT_LANE@ = first TEST_PROFILES entry (lane of a frame
+# without "lane"), the plugin port 18700 = TEST_GATEWAY_PORT, and the routes marker line under profile_routes = one
+# route per test profile plus a route to a missing profile. No secrets.
+# The only LLM is the loopback mock.
+model:
+  default: mock-model
+  provider: mock
+providers:
+  mock:
+    api: http://127.0.0.1:@LLM_PORT@/v1
+    api_key: not-a-secret-mock
+    transport: chat_completions
+    default_model: mock-model
+    discover_models: false
+    context_length: 131072
+    models:
+      mock-model:
+        context_length: 131072
+plugins:
+  enabled:
+    - glasses
+approvals:
+  mode: manual
+  timeout: 60
+gateway:
+  multiplex_profiles: true
+  profile_routes:
+    # @ROUTES@
+  platforms:
+    glasses:
+      enabled: true
+      extra:
+        port: 18700
+        token_file: "@P@/glasses-token"
+        event_log: "@P@/glasses-events.jsonl"
+        default_lane: "@DEFAULT_LANE@"
+        user_id: operator
+# Plugin platforms get NO tools by default (default toolset "hermes-glasses" does not exist) -> explicit list.
+platform_toolsets:
+  glasses: [terminal, file, delegation, kanban, clarify, todo, memory, session_search]

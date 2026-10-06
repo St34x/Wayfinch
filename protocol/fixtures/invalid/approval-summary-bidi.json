@@ -1,0 +1,16 @@
+{
+  "v": 1,
+  "id": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+  "type": "approval.request",
+  "ts": "2026-10-03T18:00:00Z",
+  "body": {
+    "approvalId": "appr-1",
+    "summary": "Run: ls ‮-la",
+    "choices": [
+      "once",
+      "deny"
+    ],
+    "expiresAt": "2026-10-03T18:00:00Z"
+  },
+  "seq": 7
+}

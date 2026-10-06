@@ -1,0 +1,17 @@
+Wayfinch
+Copyright 2026 The Wayfinch Authors
+
+This product is licensed under the Apache License, Version 2.0 (see the LICENSE file).
+
+Wayfinch is an independent open-source project. It is not affiliated with, endorsed by or
+sponsored by Even Realities, Mentra or Nous Research. Even Realities, G2 and Hey Even are
+trademarks or product names of their respective owners. Using third-party software with your
+glasses may be against the manufacturer's terms or affect your warranty; you use it at your
+own risk.
+
+This product depends on third-party software under their own licences; third-party code
+bundled in a release, if any, and its notices are listed in THIRD_PARTY_NOTICES.md.
+
+CODE_OF_CONDUCT.md is the Contributor Covenant, version 2.1
+(https://www.contributor-covenant.org/version/2/1/code_of_conduct/), licensed under
+CC BY 4.0, not Apache-2.0; its contact paragraph is adapted. See THIRD_PARTY_NOTICES.md.

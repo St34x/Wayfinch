@@ -1,0 +1,70 @@
+# SPDX-License-Identifier: Apache-2.0
+# Python lint + format gate (ENGINEERING.md sections 2, 3, 5, 7). Run by `make lint-py` (mk/lint-py.mk) over
+# hermes-plugin, protocol and tools. Generated code is excluded here and checked by check-codegen + mypy instead.
+# Python floor (ENGINEERING.md section 8): the plugin runs in the Hermes venv, Python 3.11 or newer. Never raise it:
+# with py314, `ruff format` rewrote `except (A, B):` to `except A, B:`, which 3.11 cannot compile.
+target-version = "py311"
+line-length = 120
+preview = true
+# Preview mode prints rule names (too-many-arguments); the gate and its tests report rule codes (PLR0913).
+output-prefer-rule-codes = true
+# Excludes also apply to paths named on the command line (editors, hooks).
+force-exclude = true
+# Only the directory check-codegen diffs against its generator; any other `generated/` dir is hand-written and linted.
+extend-exclude = ["hermes-plugin/glasses/generated/**"]
+
+[lint]
+# Preview rules only when named exactly below (PLR1702), never every preview rule.
+explicit-preview-rules = true
+# PGH004: a `# noqa` must name its codes; RUF100: a `# noqa` must still suppress something (ENGINEERING.md section 5).
+# File-level `# ruff: noqa` and nested ruff configs are refused by tools/quality/tests/test_ruff_bypass.py; it also
+# requires a reason after the codes in exactly this form: `# noqa: CODE[, CODE] - reason` (ENGINEERING.md section 5).
+select = [
+    "E", "F", "W", "B", "UP", "SIM", "BLE", "S", "T20", "ERA", "I", "C901", "PLR0913", "PLR0917", "PLR1702", "PGH004",
+    "RUF100",
+]
+
+[lint.mccabe]
+max-complexity = 10
+
+[lint.pylint]
+max-args = 4
+max-positional-args = 4
+max-nested-blocks = 3
+
+[lint.isort]
+known-first-party = ["glasses", "glasses_min"]
+known-local-folder = ["conftest", "test_*"]
+
+[lint.per-file-ignores]
+# Policy for tests (permanent): pytest asserts and injects fixtures/parameters; test data holds fake secrets and
+# bind-all addresses on purpose; tests run fixed-argv subprocesses (git, sh, the CLI under test).
+"**/tests/**" = ["S101", "PLR0913", "PLR0917", "S104", "S105", "S603", "S607"]
+
+# Ratchet baseline (ENGINEERING.md §10), checked by tools/quality/tests/test_ruff_baseline.py. One block per follow-up
+# task: a "# T<id>" header line, its entries ("<file>" = [codes]  # T<id>, same id), a blank line. Every listed code
+# must still fire in its file; the task that fixes a file deletes its own entries. New code never gets an entry.
+# BEGIN ratchet baseline
+
+# T1.111
+"hermes-plugin/glasses/config.py" = ["BLE001", "S101"]  # T1.111
+"hermes-plugin/tests/test_config.py" = ["ERA001"]  # T1.111
+"hermes-plugin/tests/test_config_check_live.py" = ["B905"]  # T1.111
+"hermes-plugin/tests/test_config_edges.py" = ["B017", "UP031"]  # T1.111
+
+# T1.112
+"tools/mock-llm/mock_llm.py" = ["C901", "T201", "UP031"]  # T1.112
+
+# T1.113
+"hermes-plugin/glasses/gate.py" = ["BLE001"]  # T1.113
+
+# T1.130
+"hermes-plugin/tests/test_registry_corrupt_store.py" = ["BLE001"]  # T1.130
+
+# T1.15
+"hermes-plugin/glasses/admin.py" = ["BLE001"]  # T1.15
+
+# T1.55
+"tools/test-hermes/glasses_min/adapter.py" = ["BLE001", "PLR0913", "PLR0917", "SIM115", "UP031"]  # T1.55
+
+# END ratchet baseline

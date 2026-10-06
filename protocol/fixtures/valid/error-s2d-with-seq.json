@@ -1,0 +1,11 @@
+{
+  "v": 1,
+  "id": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+  "type": "error",
+  "ts": "2026-10-03T18:00:00Z",
+  "body": {
+    "code": "lane_forbidden",
+    "message": "lane not allowed"
+  },
+  "seq": 9
+}

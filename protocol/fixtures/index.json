@@ -1,0 +1,480 @@
+{
+  "$comment": "SPDX-License-Identifier: Apache-2.0",
+  "description": "Golden protocol fixtures (T1.03). valid/: schema-valid frames, >=1 per type. invalid/: schema-invalid frames. codec-valid/ and codec-invalid/: schema-valid frames for rules the schema cannot express (UTF-8 byte limits, seq direction, nesting depth, lone surrogates, Feb 29 in non-leap years); the codec accepts codec-valid and rejects codec-invalid. File-name prefix d2s-/s2d- = direction the frame travels. Depth (codec-valid/codec-invalid entries): skill.call.args nesting depth, counted as defined in protocol/README.md (Limits and validation notes). Limit (entries with bytes): the max UTF-8 bytes of the field from the README limits table.",
+  "valid": [
+    {
+      "file": "ack.json",
+      "type": "ack",
+      "dir": "d2s",
+      "note": "minimal frame"
+    },
+    {
+      "file": "approval.request.json",
+      "type": "approval.request",
+      "dir": "s2d",
+      "note": "minimal frame"
+    },
+    {
+      "file": "approval.response.json",
+      "type": "approval.response",
+      "dir": "d2s",
+      "note": "minimal frame"
+    },
+    {
+      "file": "audio.chunk.json",
+      "type": "audio.chunk",
+      "dir": "d2s",
+      "note": "minimal frame"
+    },
+    {
+      "file": "audio.end.json",
+      "type": "audio.end",
+      "dir": "d2s",
+      "note": "minimal frame"
+    },
+    {
+      "file": "audio.start.json",
+      "type": "audio.start",
+      "dir": "d2s",
+      "note": "minimal frame"
+    },
+    {
+      "file": "card.state-clarify-detached.json",
+      "type": "card.state",
+      "dir": "s2d",
+      "note": "clarify card detached"
+    },
+    {
+      "file": "card.state.json",
+      "type": "card.state",
+      "dir": "s2d",
+      "note": "minimal frame"
+    },
+    {
+      "file": "clarify.request.json",
+      "type": "clarify.request",
+      "dir": "s2d",
+      "note": "minimal frame"
+    },
+    {
+      "file": "clarify.response-dismiss.json",
+      "type": "clarify.response",
+      "dir": "d2s",
+      "note": "dismiss gesture"
+    },
+    {
+      "file": "clarify.response.json",
+      "type": "clarify.response",
+      "dir": "d2s",
+      "note": "minimal frame"
+    },
+    {
+      "file": "error-s2d-with-seq.json",
+      "type": "error",
+      "dir": "s2d",
+      "note": "S->D outboxed error carries seq"
+    },
+    {
+      "file": "error.json",
+      "type": "error",
+      "dir": "both",
+      "note": "minimal frame"
+    },
+    {
+      "file": "hello.json",
+      "type": "hello",
+      "dir": "d2s",
+      "note": "minimal frame"
+    },
+    {
+      "file": "hud.state.json",
+      "type": "hud.state",
+      "dir": "s2d",
+      "note": "minimal frame"
+    },
+    {
+      "file": "long.status.json",
+      "type": "long.status",
+      "dir": "s2d",
+      "note": "minimal frame"
+    },
+    {
+      "file": "meeting.audio.json",
+      "type": "meeting.audio",
+      "dir": "d2s",
+      "note": "minimal frame"
+    },
+    {
+      "file": "meeting.control.json",
+      "type": "meeting.control",
+      "dir": "d2s",
+      "note": "minimal frame"
+    },
+    {
+      "file": "meeting.hint.json",
+      "type": "meeting.hint",
+      "dir": "s2d",
+      "note": "minimal frame"
+    },
+    {
+      "file": "meeting.start.json",
+      "type": "meeting.start",
+      "dir": "d2s",
+      "note": "minimal frame"
+    },
+    {
+      "file": "meeting.state.json",
+      "type": "meeting.state",
+      "dir": "s2d",
+      "note": "minimal frame"
+    },
+    {
+      "file": "msg.in-lane-assistant.json",
+      "type": "msg.in",
+      "dir": "d2s",
+      "note": "explicit lane"
+    },
+    {
+      "file": "msg.in.json",
+      "type": "msg.in",
+      "dir": "d2s",
+      "note": "minimal frame"
+    },
+    {
+      "file": "msg.out-long-ref-truncated.json",
+      "type": "msg.out",
+      "dir": "s2d",
+      "note": "longRef.truncated: fullText holds only the start (T1.70)"
+    },
+    {
+      "file": "msg.out-long-ref.json",
+      "type": "msg.out",
+      "dir": "s2d",
+      "note": "longRef pointer, lane work"
+    },
+    {
+      "file": "msg.out-notice.json",
+      "type": "msg.out",
+      "dir": "s2d",
+      "note": "notice"
+    },
+    {
+      "file": "msg.out.json",
+      "type": "msg.out",
+      "dir": "s2d",
+      "note": "minimal frame"
+    },
+    {
+      "file": "ping.json",
+      "type": "ping",
+      "dir": "both",
+      "note": "minimal frame"
+    },
+    {
+      "file": "pong.json",
+      "type": "pong",
+      "dir": "both",
+      "note": "minimal frame"
+    },
+    {
+      "file": "skill.call.json",
+      "type": "skill.call",
+      "dir": "s2d",
+      "note": "minimal frame"
+    },
+    {
+      "file": "skill.cancel.json",
+      "type": "skill.cancel",
+      "dir": "s2d",
+      "note": "minimal frame"
+    },
+    {
+      "file": "skill.manifest.json",
+      "type": "skill.manifest",
+      "dir": "d2s",
+      "note": "minimal frame"
+    },
+    {
+      "file": "skill.result.json",
+      "type": "skill.result",
+      "dir": "d2s",
+      "note": "minimal frame"
+    },
+    {
+      "file": "welcome.json",
+      "type": "welcome",
+      "dir": "s2d",
+      "note": "minimal frame"
+    }
+  ],
+  "invalid": [
+    {
+      "file": "approval-summary-bidi.json",
+      "reason": "bidi control in approval summary"
+    },
+    {
+      "file": "bad-base64-alphabet.json",
+      "reason": "base64url alphabet"
+    },
+    {
+      "file": "bad-base64-length.json",
+      "reason": "base64 not a multiple of 4"
+    },
+    {
+      "file": "bad-base64-padding.json",
+      "reason": "padding mid-string"
+    },
+    {
+      "file": "bad-ts-month.json",
+      "reason": "month 13"
+    },
+    {
+      "file": "bad-ts-no-offset.json",
+      "reason": "timestamp without offset"
+    },
+    {
+      "file": "bad-ulid.json",
+      "reason": "id not a ULID (U excluded)"
+    },
+    {
+      "file": "clarify-card-expired.json",
+      "reason": "clarify cards never expire"
+    },
+    {
+      "file": "clarify-request-expires-at.json",
+      "reason": "clarify.request has no expiry field"
+    },
+    {
+      "file": "extra-body-field.json",
+      "reason": "unknown body field"
+    },
+    {
+      "file": "extra-envelope-field.json",
+      "reason": "unknown envelope field"
+    },
+    {
+      "file": "lane-too-long.json",
+      "reason": "lane > 32 chars"
+    },
+    {
+      "file": "lane-trailing-cr.json",
+      "reason": "lane with trailing CR (java $ quirk)"
+    },
+    {
+      "file": "lane-trailing-lf.json",
+      "reason": "lane with trailing LF (python $ quirk)"
+    },
+    {
+      "file": "lane-uppercase.json",
+      "reason": "lane pattern"
+    },
+    {
+      "file": "long-ref-truncated-string.json",
+      "reason": "longRef.truncated must be boolean (T1.70)"
+    },
+    {
+      "file": "long-ref-truncated-without-full-text.json",
+      "reason": "longRef.truncated requires fullText (T1.70)"
+    },
+    {
+      "file": "missing-body.json",
+      "reason": "body required"
+    },
+    {
+      "file": "missing-seq-on-msg-out.json",
+      "reason": "seq required on S->D-only types"
+    },
+    {
+      "file": "oversize-long-ref-text.json",
+      "reason": "msg.out.text > 512 with longRef"
+    },
+    {
+      "file": "oversize-msg-in-text.json",
+      "reason": "msg.in.text > 2000"
+    },
+    {
+      "file": "oversize-msg-out-text.json",
+      "reason": "msg.out.text > 2048"
+    },
+    {
+      "file": "seq-on-msg-in.json",
+      "reason": "seq forbidden on D->S-only types"
+    },
+    {
+      "file": "seq-on-ping.json",
+      "reason": "keepalives never carry seq"
+    },
+    {
+      "file": "unknown-type.json",
+      "reason": "type not in the enum"
+    },
+    {
+      "file": "wrong-version-2.json",
+      "reason": "v must be 1"
+    },
+    {
+      "file": "wrong-version-string.json",
+      "reason": "v must be the integer 1"
+    }
+  ],
+  "codec-valid": [
+    {
+      "file": "d2s-msg-in-text-2000b-cyrillic.json",
+      "dir": "d2s",
+      "rule": "byte limit, exactly 2000 B",
+      "field": "msg.in.text",
+      "bytes": 2000,
+      "limit": 2000
+    },
+    {
+      "file": "d2s-ts-2028-02-29.json",
+      "dir": "d2s",
+      "rule": "Feb 29 in a leap year",
+      "field": "ts"
+    },
+    {
+      "file": "s2d-error-with-seq.json",
+      "dir": "s2d",
+      "rule": "seq on an S->D error is allowed (outboxed)",
+      "field": "seq"
+    },
+    {
+      "file": "s2d-msg-out-full-text-4096b-cyrillic.json",
+      "dir": "s2d",
+      "rule": "byte limit, exactly 4096 B",
+      "field": "msg.out.longRef.fullText",
+      "bytes": 4096,
+      "limit": 4096
+    },
+    {
+      "file": "s2d-msg-out-full-text-4096b-emoji.json",
+      "dir": "s2d",
+      "rule": "byte limit, exactly 4096 B",
+      "field": "msg.out.longRef.fullText",
+      "bytes": 4096,
+      "limit": 4096
+    },
+    {
+      "file": "s2d-msg-out-text-2048b-cyrillic.json",
+      "dir": "s2d",
+      "rule": "byte limit, exactly 2048 B (2-byte chars)",
+      "field": "msg.out.text",
+      "bytes": 2048,
+      "limit": 2048
+    },
+    {
+      "file": "s2d-msg-out-text-2048b-emoji.json",
+      "dir": "s2d",
+      "rule": "byte limit, exactly 2048 B (4-byte chars)",
+      "field": "msg.out.text",
+      "bytes": 2048,
+      "limit": 2048
+    },
+    {
+      "file": "s2d-msg-out-text-512b-long-ref-cyrillic.json",
+      "dir": "s2d",
+      "rule": "byte limit with longRef, exactly 512 B",
+      "field": "msg.out.text",
+      "bytes": 512,
+      "limit": 512
+    },
+    {
+      "file": "s2d-msg-out-text-512b-long-ref-emoji.json",
+      "dir": "s2d",
+      "rule": "byte limit with longRef, exactly 512 B",
+      "field": "msg.out.text",
+      "bytes": 512,
+      "limit": 512
+    },
+    {
+      "file": "s2d-skill-call-args-depth-32.json",
+      "dir": "s2d",
+      "rule": "nesting depth 32 (max allowed)",
+      "field": "skill.call.args",
+      "depth": 32
+    }
+  ],
+  "codec-invalid": [
+    {
+      "file": "d2s-error-with-seq.json",
+      "dir": "d2s",
+      "rule": "seq on a D->S error (a D->S frame never has seq)",
+      "field": "seq"
+    },
+    {
+      "file": "d2s-msg-in-lone-surrogate.json",
+      "dir": "d2s",
+      "rule": "lone surrogate escape \\ud800 is not a Unicode scalar value",
+      "field": "msg.in.text"
+    },
+    {
+      "file": "d2s-msg-in-text-2002b-cyrillic.json",
+      "dir": "d2s",
+      "rule": "byte limit exceeded",
+      "field": "msg.in.text",
+      "bytes": 2002,
+      "limit": 2000
+    },
+    {
+      "file": "d2s-ts-2027-02-29.json",
+      "dir": "d2s",
+      "rule": "Feb 29 in a non-leap year",
+      "field": "ts"
+    },
+    {
+      "file": "s2d-msg-out-full-text-4098b-cyrillic.json",
+      "dir": "s2d",
+      "rule": "byte limit exceeded",
+      "field": "msg.out.longRef.fullText",
+      "bytes": 4098,
+      "limit": 4096
+    },
+    {
+      "file": "s2d-msg-out-full-text-4100b-emoji.json",
+      "dir": "s2d",
+      "rule": "byte limit exceeded",
+      "field": "msg.out.longRef.fullText",
+      "bytes": 4100,
+      "limit": 4096
+    },
+    {
+      "file": "s2d-msg-out-text-2050b-cyrillic.json",
+      "dir": "s2d",
+      "rule": "byte limit exceeded: 1025 x 2-byte chars",
+      "field": "msg.out.text",
+      "bytes": 2050,
+      "limit": 2048
+    },
+    {
+      "file": "s2d-msg-out-text-2052b-emoji.json",
+      "dir": "s2d",
+      "rule": "byte limit exceeded: 513 x 4-byte chars",
+      "field": "msg.out.text",
+      "bytes": 2052,
+      "limit": 2048
+    },
+    {
+      "file": "s2d-msg-out-text-514b-long-ref-cyrillic.json",
+      "dir": "s2d",
+      "rule": "byte limit with longRef exceeded",
+      "field": "msg.out.text",
+      "bytes": 514,
+      "limit": 512
+    },
+    {
+      "file": "s2d-msg-out-text-516b-long-ref-emoji.json",
+      "dir": "s2d",
+      "rule": "byte limit with longRef exceeded",
+      "field": "msg.out.text",
+      "bytes": 516,
+      "limit": 512
+    },
+    {
+      "file": "s2d-skill-call-args-depth-33.json",
+      "dir": "s2d",
+      "rule": "nesting depth 33 > 32",
+      "field": "skill.call.args",
+      "depth": 33
+    }
+  ]
+}

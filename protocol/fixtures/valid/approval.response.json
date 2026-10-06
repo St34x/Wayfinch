@@ -1,0 +1,11 @@
+{
+  "v": 1,
+  "id": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+  "type": "approval.response",
+  "ts": "2026-10-03T18:00:00Z",
+  "body": {
+    "approvalId": "appr-1",
+    "choice": "once",
+    "via": "glasses"
+  }
+}

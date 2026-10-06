@@ -1,0 +1,30 @@
+# SPDX-License-Identifier: Apache-2.0
+# Coverage gate (T1.101, ENGINEERING.md section 6): run by `make coverage-py` (mk/coverage-py.mk), checked by
+# tools/quality/coverage_areas.py. Core = the `source_modules` of the core-purity contract in .importlinter (one list,
+# two checks): every core file >= 90 %, every other plugin file >= 70 %, and each area as a whole the same (two
+# `coverage report --fail-under` runs). Percentages count statements and branches (branch = True).
+# coverage_areas.py allows exactly the keys below with exactly these values (fail closed): no other section or key,
+# so code cannot be excluded or omitted here. Tests live outside `source`; generated code is omitted by its exact
+# path (checked by check-codegen and mypy instead). Empty exclude_lines/partial_branches switch off the default
+# `# pragma: no cover` / `# pragma: no branch` exclusions: a line in the plugin either runs in a test or counts
+# as missed.
+
+[run]
+branch = True
+source = hermes-plugin/glasses
+omit = hermes-plugin/glasses/generated/*
+relative_files = True
+data_file = .local/coverage-py/.coverage
+
+[report]
+exclude_lines =
+partial_branches =
+
+# Ratchet baseline: one block per follow-up id - a "# T<id>" header line, its entries
+# "<file> = <percent>" (the measured percentage rounded down, exact), a blank line. A file below its area minimum
+# needs an entry; an entry that no longer matches the measurement (dropped or raised) or whose file reaches the
+# minimum fails. The task that tests the file deletes its own block. New code never gets an entry.
+[wayfinch:coverage-ratchet]
+
+# T1.113
+hermes-plugin/glasses/adapter.py = 8

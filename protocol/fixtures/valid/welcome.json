@@ -1,0 +1,20 @@
+{
+  "v": 1,
+  "id": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+  "type": "welcome",
+  "ts": "2026-10-03T18:00:00Z",
+  "body": {
+    "deviceId": "dev_01JABCDEFGHJKMNPQRSTVWXYZ0",
+    "serverTime": "2026-10-03T18:00:00Z",
+    "lanes": [
+      "assistant",
+      "work"
+    ],
+    "limits": {
+      "maxFrame": 65536,
+      "maxAudioSec": 30
+    },
+    "resumeFrom": 1
+  },
+  "seq": 7
+}

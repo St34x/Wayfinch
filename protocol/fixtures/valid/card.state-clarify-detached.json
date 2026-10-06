@@ -1,0 +1,11 @@
+{
+  "v": 1,
+  "id": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+  "type": "card.state",
+  "ts": "2026-10-03T18:00:00Z",
+  "body": {
+    "clarifyId": "clr-1",
+    "state": "detached"
+  },
+  "seq": 7
+}

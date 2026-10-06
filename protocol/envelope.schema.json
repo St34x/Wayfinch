@@ -1,0 +1,1728 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:wayfinch:protocol:envelope:v1",
+  "$comment": "SPDX-License-Identifier: Apache-2.0",
+  "title": "Wayfinch envelope v1",
+  "description": "One JSON text frame between the phone app (device) and the server plugin over WSS. Frame caps: 64 KiB (audio.chunk / meeting.audio: 32 KiB), measured in bytes of the UTF-8 WebSocket payload and enforced by the codec. String limits are UTF-8 byte limits enforced by the codec; each `maxLength` here is the same number as a code-point bound (never stricter than the byte limit). The bounds are chosen so that every schema-valid frame fits its cap even when the serialiser escapes every non-ASCII character (12 bytes per astral code point); only the open objects (skill.call.args, skill.result.output, skill.manifest.skills[]) rely on the codec's frame cap. See protocol/README.md.",
+  "type": "object",
+  "properties": {
+    "v": {
+      "description": "Protocol major. Mismatch ⇒ error `unsupported_version` + close 4400.",
+      "const": 1
+    },
+    "id": {
+      "$ref": "#/$defs/ulid",
+      "description": "ULID, unique per sender (D→S deduplicated within 10 min)."
+    },
+    "type": {
+      "enum": [
+        "hello",
+        "welcome",
+        "ping",
+        "pong",
+        "ack",
+        "msg.in",
+        "audio.start",
+        "audio.chunk",
+        "audio.end",
+        "msg.out",
+        "long.status",
+        "approval.request",
+        "approval.response",
+        "clarify.request",
+        "clarify.response",
+        "card.state",
+        "hud.state",
+        "skill.manifest",
+        "skill.call",
+        "skill.result",
+        "skill.cancel",
+        "meeting.start",
+        "meeting.audio",
+        "meeting.control",
+        "meeting.state",
+        "meeting.hint",
+        "error"
+      ]
+    },
+    "ts": {
+      "$ref": "#/$defs/timestamp"
+    },
+    "seq": {
+      "description": "Server-to-device outbox sequence; per-device monotonic; acked by the device. Required on S→D-only types; forbidden on D→S-only types and on `ping`/`pong` (keepalives are never outboxed); optional on `error` (an S→D `error` with `seq` is outboxed, one without is connection-scoped; a D→S `error` never has `seq` — the codec enforces direction).",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "corr": {
+      "$ref": "#/$defs/ulid",
+      "description": "Optional: id of the frame this one answers."
+    },
+    "lane": {
+      "$ref": "#/$defs/lane"
+    },
+    "body": {
+      "type": "object",
+      "maxProperties": 64,
+      "description": "Type-specific; selected by `type` (see $defs/body.<type>)."
+    }
+  },
+  "required": [
+    "v",
+    "id",
+    "type",
+    "ts",
+    "body"
+  ],
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "enum": [
+              "welcome",
+              "msg.out",
+              "long.status",
+              "approval.request",
+              "clarify.request",
+              "card.state",
+              "hud.state",
+              "skill.call",
+              "skill.cancel",
+              "meeting.state",
+              "meeting.hint"
+            ]
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "required": [
+          "seq"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "enum": [
+              "hello",
+              "ack",
+              "msg.in",
+              "audio.start",
+              "audio.chunk",
+              "audio.end",
+              "approval.response",
+              "clarify.response",
+              "skill.manifest",
+              "skill.result",
+              "meeting.start",
+              "meeting.audio",
+              "meeting.control",
+              "ping",
+              "pong"
+            ]
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "not": {
+          "required": [
+            "seq"
+          ]
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "hello"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.hello"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "welcome"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.welcome"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "ping"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.ping"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "pong"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.pong"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "ack"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.ack"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "msg.in"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.msg.in"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "audio.start"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.audio.start"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "audio.chunk"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.audio.chunk"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "audio.end"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.audio.end"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "msg.out"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.msg.out"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "long.status"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.long.status"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "approval.request"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.approval.request"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "approval.response"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.approval.response"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "clarify.request"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.clarify.request"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "clarify.response"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.clarify.response"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "card.state"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.card.state"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "hud.state"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.hud.state"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "skill.manifest"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.skill.manifest"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "skill.call"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.skill.call"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "skill.result"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.skill.result"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "skill.cancel"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.skill.cancel"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "meeting.start"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.meeting.start"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "meeting.audio"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.meeting.audio"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "meeting.control"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.meeting.control"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "meeting.state"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.meeting.state"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "meeting.hint"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.meeting.hint"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "error"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/body.error"
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "ulid": {
+      "description": "ULID (Crockford base32, 26 chars).",
+      "type": "string",
+      "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$",
+      "maxLength": 26,
+      "minLength": 26,
+      "not": {
+        "pattern": "[\\n\\r\\u0085\\u2028\\u2029]"
+      }
+    },
+    "opaqueId": {
+      "description": "Opaque identifier issued by one side (Hermes ids, clip ids, device ids).",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9._:-]+$",
+      "not": {
+        "pattern": "[\\n\\r\\u0085\\u2028\\u2029]"
+      }
+    },
+    "timestamp": {
+      "description": "RFC 3339 date-time with an explicit offset (`Z` or ±hh:mm, at most ±14:00), e.g. `2026-10-03T18:00:00Z`. Month 01–12, day within the month (Feb ≤ 29; the leap-year check is the codec's), hour 00–23, minute/second 00–59 (no leap second), up to 9 fraction digits.",
+      "type": "string",
+      "maxLength": 35,
+      "pattern": "^[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|02-(?:0[1-9]|1[0-9]|2[0-9]))T(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]{1,9})?(?:Z|[+-](?:0[0-9]|1[0-3]):[0-5][0-9]|[+-]14:00)$",
+      "not": {
+        "pattern": "[\\n\\r\\u0085\\u2028\\u2029]"
+      }
+    },
+    "lane": {
+      "description": "Lane name. A pattern, not an enum: the allowlist is server config.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+      "maxLength": 32,
+      "not": {
+        "pattern": "[\\n\\r\\u0085\\u2028\\u2029]"
+      }
+    },
+    "langTag": {
+      "description": "BCP 47 language tag, e.g. `en`, `pt-BR`.",
+      "type": "string",
+      "maxLength": 35,
+      "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+      "not": {
+        "pattern": "[\\n\\r\\u0085\\u2028\\u2029]"
+      }
+    },
+    "code": {
+      "description": "snake_case machine code.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,63}$",
+      "maxLength": 64,
+      "not": {
+        "pattern": "[\\n\\r\\u0085\\u2028\\u2029]"
+      }
+    },
+    "skillName": {
+      "description": "Skill id, e.g. `audio.volume_set`.",
+      "type": "string",
+      "maxLength": 128,
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+      "not": {
+        "pattern": "[\\n\\r\\u0085\\u2028\\u2029]"
+      }
+    },
+    "platform": {
+      "description": "Hermes messaging platform name (the configured `glasses.long_answers.platform`), e.g. `telegram`.",
+      "type": "string",
+      "maxLength": 32,
+      "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+      "not": {
+        "pattern": "[\\n\\r\\u0085\\u2028\\u2029]"
+      }
+    },
+    "profile": {
+      "description": "Hermes profile name; same rule as Hermes `PROFILE_ID_RE` (`hermes_constants.py`): `^[a-z0-9][a-z0-9_-]{0,63}$`.",
+      "type": "string",
+      "maxLength": 64,
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+      "not": {
+        "pattern": "[\\n\\r\\u0085\\u2028\\u2029]"
+      }
+    },
+    "hintLevel": {
+      "enum": [
+        "off",
+        "low",
+        "medium",
+        "high"
+      ]
+    },
+    "base64Chunk": {
+      "description": "Standard base64 with padding. ≤31744 chars (23808 audio bytes), so the whole frame stays ≤32 KiB.",
+      "type": "string",
+      "minLength": 4,
+      "maxLength": 31744,
+      "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+      "not": {
+        "pattern": "[\\n\\r\\u0085\\u2028\\u2029]"
+      }
+    },
+    "body.hello": {
+      "description": "Device opens a session. `lastAckedSeq` drives the outbox replay.",
+      "type": "object",
+      "properties": {
+        "appVersion": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "protocol": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 255,
+          "description": "Highest protocol major the device supports."
+        },
+        "lastAckedSeq": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "manifestHash": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9:_-]+$",
+          "description": "Hash of the device's current skill manifest, e.g. `sha256:<hex>`.",
+          "not": {
+            "pattern": "[\\n\\r\\u0085\\u2028\\u2029]"
+          }
+        },
+        "glasses": {
+          "description": "Paired glasses.",
+          "type": "object",
+          "properties": {
+            "model": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            "fw": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "required": [
+            "model",
+            "fw"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "appVersion",
+        "protocol",
+        "lastAckedSeq",
+        "manifestHash",
+        "glasses"
+      ],
+      "additionalProperties": false
+    },
+    "body.welcome": {
+      "description": "Server accepts the session.",
+      "type": "object",
+      "properties": {
+        "deviceId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "serverTime": {
+          "$ref": "#/$defs/timestamp"
+        },
+        "lanes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/lane"
+          },
+          "maxItems": 32,
+          "uniqueItems": true
+        },
+        "limits": {
+          "description": "Limits the device must respect.",
+          "type": "object",
+          "properties": {
+            "maxFrame": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1048576,
+              "description": "Max frame size in bytes."
+            },
+            "maxAudioSec": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 30,
+              "description": "Max command clip length in seconds (≤30, matches `audio.end.durationMs`)."
+            }
+          },
+          "required": [
+            "maxFrame",
+            "maxAudioSec"
+          ],
+          "additionalProperties": false
+        },
+        "resumeFrom": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "First `seq` the server replays."
+        }
+      },
+      "required": [
+        "deviceId",
+        "serverTime",
+        "lanes",
+        "limits",
+        "resumeFrom"
+      ],
+      "additionalProperties": false
+    },
+    "body.ping": {
+      "description": "Keepalive (every 25 s). Empty body.",
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "body.pong": {
+      "description": "Keepalive answer. Empty body.",
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "body.ack": {
+      "description": "Device acknowledges every server frame up to and including `upToSeq`.",
+      "type": "object",
+      "properties": {
+        "upToSeq": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "upToSeq"
+      ],
+      "additionalProperties": false
+    },
+    "body.msg.in": {
+      "description": "Text from the operator (transcribed on the phone or typed; `typed` is reserved).",
+      "type": "object",
+      "properties": {
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "≤2000 UTF-8 bytes (codec); maxLength is the code-point bound."
+        },
+        "origin": {
+          "enum": [
+            "ptt",
+            "wake",
+            "typed"
+          ]
+        },
+        "langHint": {
+          "$ref": "#/$defs/langTag"
+        }
+      },
+      "required": [
+        "text",
+        "origin"
+      ],
+      "additionalProperties": false
+    },
+    "body.audio.start": {
+      "description": "Start of a command voice clip.",
+      "type": "object",
+      "properties": {
+        "clipId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "mime": {
+          "const": "audio/ogg;codecs=opus"
+        }
+      },
+      "required": [
+        "clipId",
+        "mime"
+      ],
+      "additionalProperties": false
+    },
+    "body.audio.chunk": {
+      "description": "One chunk of a command voice clip (base64; the whole frame max 32 KiB).",
+      "type": "object",
+      "properties": {
+        "clipId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "chunk": {
+          "$ref": "#/$defs/base64Chunk"
+        }
+      },
+      "required": [
+        "clipId",
+        "chunk"
+      ],
+      "additionalProperties": false
+    },
+    "body.audio.end": {
+      "description": "End of a command voice clip.",
+      "type": "object",
+      "properties": {
+        "clipId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "durationMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 30000
+        }
+      },
+      "required": [
+        "clipId",
+        "durationMs"
+      ],
+      "additionalProperties": false
+    },
+    "body.msg.out": {
+      "description": "Agent or gateway output for the glasses.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "enum": [
+            "answer",
+            "ack",
+            "push",
+            "delta",
+            "heard",
+            "notice"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "maxLength": 2048,
+          "description": "≤2048 UTF-8 bytes; ≤512 when `longRef` is present (the one-line pointer). Codec enforces bytes."
+        },
+        "chatId": {
+          "type": "string",
+          "maxLength": 40,
+          "pattern": "^glasses:[a-z][a-z0-9_-]{0,31}$",
+          "description": "`glasses:<lane>`.",
+          "not": {
+            "pattern": "[\\n\\r\\u0085\\u2028\\u2029]"
+          }
+        },
+        "final": {
+          "type": "boolean"
+        },
+        "notice": {
+          "description": "Classified gateway/Kanban notice (only with kind `notice`).",
+          "type": "object",
+          "properties": {
+            "kind": {
+              "enum": [
+                "kanban_done",
+                "kanban_blocked",
+                "system"
+              ]
+            },
+            "ref": {
+              "$ref": "#/$defs/opaqueId",
+              "description": "Kanban task id."
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        "longRef": {
+          "description": "Pointer to a long answer delivered to another channel.",
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/opaqueId"
+            },
+            "channel": {
+              "$ref": "#/$defs/platform"
+            },
+            "profile": {
+              "$ref": "#/$defs/profile"
+            },
+            "status": {
+              "enum": [
+                "pending",
+                "sent",
+                "failed",
+                "none"
+              ]
+            },
+            "fullText": {
+              "type": "string",
+              "maxLength": 4096,
+              "description": "Full text for the phone cache, ≤4096 UTF-8 bytes (codec); the producer truncates on a code-point boundary. The complete text goes to the long-answer channel."
+            },
+            "truncated": {
+              "type": "boolean",
+              "description": "`true` = `fullText` holds only the start of the answer (the phone shows `truncated — full text in <channel>`); absent = `fullText` is complete or absent. Requires `fullText`."
+            }
+          },
+          "required": [
+            "id",
+            "channel",
+            "profile",
+            "status"
+          ],
+          "dependentRequired": {
+            "truncated": [
+              "fullText"
+            ]
+          },
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "kind",
+        "text",
+        "chatId",
+        "final"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "const": "notice"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          "then": {
+            "required": [
+              "notice"
+            ]
+          },
+          "else": {
+            "not": {
+              "required": [
+                "notice"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "longRef"
+            ]
+          },
+          "then": {
+            "properties": {
+              "text": {
+                "maxLength": 512
+              }
+            }
+          }
+        }
+      ]
+    },
+    "body.long.status": {
+      "description": "Delivery state of a long answer. `failed` is permanent.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "status": {
+          "enum": [
+            "sent",
+            "retrying",
+            "failed"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "body.approval.request": {
+      "description": "Exec approval card. Approvals expire fail-closed.",
+      "type": "object",
+      "properties": {
+        "approvalId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 300,
+          "description": "≤300 UTF-8 bytes, server-truncated. No bidi controls (display spoofing).",
+          "not": {
+            "pattern": "[\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]"
+          }
+        },
+        "detail": {
+          "type": "string",
+          "maxLength": 4000,
+          "not": {
+            "pattern": "[\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]"
+          },
+          "description": "≤4000 UTF-8 bytes. No bidi controls."
+        },
+        "choices": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "once",
+              "deny"
+            ]
+          },
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true
+        },
+        "expiresAt": {
+          "$ref": "#/$defs/timestamp"
+        }
+      },
+      "required": [
+        "approvalId",
+        "summary",
+        "choices",
+        "expiresAt"
+      ],
+      "additionalProperties": false
+    },
+    "body.approval.response": {
+      "description": "Operator decision on an approval card.",
+      "type": "object",
+      "properties": {
+        "approvalId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "choice": {
+          "enum": [
+            "once",
+            "deny"
+          ]
+        },
+        "via": {
+          "enum": [
+            "glasses",
+            "phone"
+          ]
+        }
+      },
+      "required": [
+        "approvalId",
+        "choice",
+        "via"
+      ],
+      "additionalProperties": false
+    },
+    "body.clarify.request": {
+      "description": "Clarifying question card. Never expires: no expiry field. `detached` = Hermes moved on; still answerable, the answer becomes a new `msg.in`.",
+      "type": "object",
+      "properties": {
+        "clarifyId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "question": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "not": {
+            "pattern": "[\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]"
+          },
+          "description": "≤2000 UTF-8 bytes. No bidi controls."
+        },
+        "choices": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "not": {
+              "pattern": "[\\u061c\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]"
+            },
+            "description": "≤200 UTF-8 bytes. No bidi controls."
+          },
+          "maxItems": 4
+        },
+        "detached": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "clarifyId",
+        "question",
+        "choices",
+        "detached"
+      ],
+      "additionalProperties": false
+    },
+    "body.clarify.response": {
+      "description": "Answer to a clarify card, or an explicit dismiss gesture. Exactly one of `answer`/`dismiss`.",
+      "type": "object",
+      "properties": {
+        "clarifyId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "answer": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "dismiss": {
+          "const": true
+        }
+      },
+      "required": [
+        "clarifyId"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "answer"
+          ]
+        },
+        {
+          "required": [
+            "dismiss"
+          ]
+        }
+      ]
+    },
+    "body.card.state": {
+      "description": "State change of an approval or clarify card. Only approvals expire; clarify cards become `detached` or `dismissed`.",
+      "type": "object",
+      "properties": {
+        "approvalId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "clarifyId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "state": {
+          "enum": [
+            "answered",
+            "expired",
+            "answered_elsewhere",
+            "detached",
+            "dismissed"
+          ]
+        }
+      },
+      "required": [
+        "state"
+      ],
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "approvalId"
+          ],
+          "not": {
+            "required": [
+              "clarifyId"
+            ]
+          },
+          "properties": {
+            "state": {
+              "enum": [
+                "answered",
+                "expired",
+                "answered_elsewhere"
+              ]
+            }
+          }
+        },
+        {
+          "required": [
+            "clarifyId"
+          ],
+          "not": {
+            "required": [
+              "approvalId"
+            ]
+          },
+          "properties": {
+            "state": {
+              "enum": [
+                "answered",
+                "answered_elsewhere",
+                "detached",
+                "dismissed"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "body.hud.state": {
+      "description": "Idle HUD counters and the long-answer channel state.",
+      "type": "object",
+      "properties": {
+        "hermes": {
+          "enum": [
+            "up",
+            "degraded"
+          ]
+        },
+        "pendingApprovals": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "unreadPushes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "longChannel": {
+          "description": "Long-answer channel state: the platform name (e.g. `telegram`), or `none` when no long-answer channel is configured for the device's home lane.",
+          "$ref": "#/$defs/platform"
+        }
+      },
+      "required": [
+        "hermes",
+        "pendingApprovals",
+        "unreadPushes"
+      ],
+      "additionalProperties": false
+    },
+    "body.skill.manifest": {
+      "description": "Device skill manifest. Entries are validated against `protocol/skill-manifest.schema.json` (separate task).",
+      "type": "object",
+      "properties": {
+        "manifestVersion": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "maxProperties": 64
+          },
+          "maxItems": 256
+        }
+      },
+      "required": [
+        "manifestVersion",
+        "skills"
+      ],
+      "additionalProperties": false
+    },
+    "body.skill.call": {
+      "description": "Phone-skill call from the phone bridge (an MCP server inside the plugin).",
+      "type": "object",
+      "properties": {
+        "callId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "skill": {
+          "$ref": "#/$defs/skillName"
+        },
+        "args": {
+          "type": "object",
+          "maxProperties": 64
+        },
+        "mode": {
+          "enum": [
+            "read",
+            "act"
+          ]
+        },
+        "deadlineMs": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 600000
+        }
+      },
+      "required": [
+        "callId",
+        "skill",
+        "args",
+        "mode",
+        "deadlineMs"
+      ],
+      "additionalProperties": false
+    },
+    "body.skill.result": {
+      "description": "Result of a phone-skill call.",
+      "type": "object",
+      "properties": {
+        "callId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "status": {
+          "enum": [
+            "ok",
+            "denied",
+            "expired",
+            "invalid",
+            "error",
+            "unavailable"
+          ]
+        },
+        "output": {
+          "type": "object",
+          "maxProperties": 256
+        },
+        "error": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        }
+      },
+      "required": [
+        "callId",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "body.skill.cancel": {
+      "description": "Cancel a pending phone-skill call.",
+      "type": "object",
+      "properties": {
+        "callId": {
+          "$ref": "#/$defs/opaqueId"
+        }
+      },
+      "required": [
+        "callId"
+      ],
+      "additionalProperties": false
+    },
+    "body.meeting.start": {
+      "description": "Phase 4. Sent only after the operator's explicit start; rejected unless the device has feature `meeting`.",
+      "type": "object",
+      "properties": {
+        "meetingId": {
+          "$ref": "#/$defs/ulid"
+        },
+        "langHints": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/langTag"
+          },
+          "maxItems": 8,
+          "uniqueItems": true,
+          "description": "Optional; absent or empty = auto-detect (generic default `language_hints: []`)."
+        },
+        "hintLevel": {
+          "$ref": "#/$defs/hintLevel"
+        },
+        "prepTerms": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "description": "≤100 UTF-8 bytes."
+          },
+          "maxItems": 50
+        },
+        "mic": {
+          "const": "glasses"
+        }
+      },
+      "required": [
+        "meetingId",
+        "hintLevel",
+        "mic"
+      ],
+      "additionalProperties": false
+    },
+    "body.meeting.audio": {
+      "description": "Phase 4 meeting audio chunk (base64; the whole frame max 32 KiB).",
+      "type": "object",
+      "properties": {
+        "meetingId": {
+          "$ref": "#/$defs/ulid"
+        },
+        "seq": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991,
+          "description": "Per meeting, for ring-buffer resend/dedupe."
+        },
+        "mime": {
+          "const": "audio/ogg;codecs=opus",
+          "description": "v1: OGG/Opus only. PCM s16le 16 kHz is added only if a later measurement requires it (a schema change shipped with both stacks)."
+        },
+        "chunk": {
+          "$ref": "#/$defs/base64Chunk"
+        }
+      },
+      "required": [
+        "meetingId",
+        "seq",
+        "mime",
+        "chunk"
+      ],
+      "additionalProperties": false
+    },
+    "body.meeting.control": {
+      "description": "Phase 4 meeting control. `hintLevel` is required with action `hint_level`.",
+      "type": "object",
+      "properties": {
+        "meetingId": {
+          "$ref": "#/$defs/ulid"
+        },
+        "action": {
+          "enum": [
+            "pause",
+            "resume",
+            "stop",
+            "mark",
+            "hint_level"
+          ]
+        },
+        "hintLevel": {
+          "$ref": "#/$defs/hintLevel"
+        }
+      },
+      "required": [
+        "meetingId",
+        "action"
+      ],
+      "additionalProperties": false,
+      "if": {
+        "properties": {
+          "action": {
+            "const": "hint_level"
+          }
+        },
+        "required": [
+          "action"
+        ]
+      },
+      "then": {
+        "required": [
+          "hintLevel"
+        ]
+      }
+    },
+    "body.meeting.state": {
+      "description": "Phase 4 meeting state. `error` is required with state `error`.",
+      "type": "object",
+      "properties": {
+        "meetingId": {
+          "$ref": "#/$defs/ulid"
+        },
+        "state": {
+          "enum": [
+            "starting",
+            "active",
+            "paused",
+            "finalizing",
+            "done",
+            "error"
+          ]
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "elapsedMs": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 86400000
+        },
+        "error": {
+          "$ref": "#/$defs/code"
+        }
+      },
+      "required": [
+        "meetingId",
+        "state",
+        "provider",
+        "elapsedMs"
+      ],
+      "additionalProperties": false,
+      "if": {
+        "properties": {
+          "state": {
+            "const": "error"
+          }
+        },
+        "required": [
+          "state"
+        ]
+      },
+      "then": {
+        "required": [
+          "error"
+        ]
+      }
+    },
+    "body.meeting.hint": {
+      "description": "Phase 4 hint card for the glasses.",
+      "type": "object",
+      "properties": {
+        "meetingId": {
+          "$ref": "#/$defs/ulid"
+        },
+        "hintId": {
+          "$ref": "#/$defs/opaqueId"
+        },
+        "kind": {
+          "enum": [
+            "TERM",
+            "WHO",
+            "ANS",
+            "TODO",
+            "FALSE",
+            "TOPIC"
+          ]
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 180,
+          "description": "≤180 UTF-8 bytes (≈60 characters of any BMP script); fitting the line is the renderer's job."
+        },
+        "ttlMs": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 60000,
+          "default": 10000
+        }
+      },
+      "required": [
+        "meetingId",
+        "hintId",
+        "kind",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "body.error": {
+      "description": "Error report. `message` never carries secrets or message bodies.",
+      "type": "object",
+      "properties": {
+        "code": {
+          "$ref": "#/$defs/code"
+        },
+        "message": {
+          "type": "string",
+          "maxLength": 500
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

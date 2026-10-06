@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "id": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+  "type": "msg.in",
+  "ts": "2026-10-03T18:00:00Z",
+  "body": {
+    "text": "what time is it",
+    "origin": "ptt",
+    "langHint": "en"
+  },
+  "lane": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+}

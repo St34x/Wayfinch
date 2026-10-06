@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+name: glasses
+label: Glasses (test harness)
+kind: platform
+version: 0.0.1
+description: >
+  Test harness: minimal `glasses` platform adapter. Binds 127.0.0.1 only, serves one
+  WebSocket endpoint (/ws, bearer token), turns {"type":"msg","lane":..,"text":..}
+  into gateway MessageEvents on chat_id "glasses:<lane>", and pushes everything the
+  gateway sends (answers, async completions, approval / clarify / slash-confirm
+  prompts) to every connected WS client. Not production code.
+author: test harness
+requires_env: []
+optional_env:
+  - name: GLASSES_ALLOWED_USERS
+    description: "Comma-separated user ids allowed (test harness: operator)"
+    password: false
+  - name: GLASSES_HOME_CHANNEL
+    description: "Home chat id for cron / notification delivery (e.g. glasses:alpha)"
+    password: false

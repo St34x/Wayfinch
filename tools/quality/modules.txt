@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+# Module list of the README gate (tools/quality/check_readmes.py, run by `make check-hygiene`; ENGINEERING.md
+# section 1). Every module dir has a README.md of at most 40 lines whose first sections are exactly
+# Purpose / Public API / Invariants. Line forms (format and rules: the checker's docstring):
+#   <dir>
+#   <dir> | part-of: <module>          documented in that module's README, which names it as `<name>/`
+#   <dir> | length-override | reason: <text naming a specification> | ref: <doc> §<n>
+# Spec documents are the only length overrides; <doc> §<n> is the tracked public rule allowing them
+# (ENGINEERING.md §1), and each override is one line with its reason.
+# Every directory directly under hermes-plugin/ and tools/ (except tests/) must appear here.
+# Android modules are added by the task that creates them.
+
+hermes-plugin/glasses
+mk
+protocol | length-override | reason: protocol specification (limits table parsed by tests and codegen) | ref: ENGINEERING.md §1
+tools
+tools/codegen
+tools/mock-llm
+tools/quality
+tools/test-hermes | part-of: tools

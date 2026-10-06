@@ -1,0 +1,14 @@
+{
+  "v": 1,
+  "id": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+  "type": "skill.manifest",
+  "ts": "2026-10-03T18:00:00Z",
+  "body": {
+    "manifestVersion": 1,
+    "skills": [
+      {
+        "name": "device.status"
+      }
+    ]
+  }
+}

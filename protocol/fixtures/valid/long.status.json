@@ -1,0 +1,11 @@
+{
+  "v": 1,
+  "id": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+  "type": "long.status",
+  "ts": "2026-10-03T18:00:00Z",
+  "body": {
+    "id": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+    "status": "sent"
+  },
+  "seq": 7
+}

@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: Apache-2.0
+# gitleaks configuration, used by tools/secret-scan.sh (`make secret-scan`, part of `make test`).
+# The default gitleaks rule set applies in full; the only exception is a narrow, explicit directory for
+# deliberately fake keys used by tests.
+title = "Wayfinch secret scan"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Deliberately fake secrets used as test fixtures (never real credentials)"
+paths = ['''(^|/)tests/fixtures/fake-secrets/''']

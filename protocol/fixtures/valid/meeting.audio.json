@@ -1,0 +1,12 @@
+{
+  "v": 1,
+  "id": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+  "type": "meeting.audio",
+  "ts": "2026-10-03T18:00:00Z",
+  "body": {
+    "meetingId": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+    "seq": 0,
+    "mime": "audio/ogg;codecs=opus",
+    "chunk": "AAAA"
+  }
+}

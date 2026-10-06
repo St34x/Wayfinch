@@ -1,0 +1,10 @@
+{
+  "v": 1,
+  "id": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+  "type": "skill.cancel",
+  "ts": "2026-10-03T18:00:00Z",
+  "body": {
+    "callId": "01JABCDEFGHJKMNPQRSTVWXYZ0"
+  },
+  "seq": 7
+}

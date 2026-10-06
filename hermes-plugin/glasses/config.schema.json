@@ -1,0 +1,379 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:wayfinch:plugin:glasses:config:v1",
+  "$comment": "SPDX-License-Identifier: Apache-2.0",
+  "title": "glasses platform settings",
+  "description": "Settings of the glasses platform plugin under gateway.platforms.glasses.extra in the Hermes config. glasses/config.py validates with this schema (types, ranges, patterns) plus the rules a schema cannot express (loopback host, public_url normal form, absolute paths, port != bridge_port, home_lane in lanes). Keys the Hermes gateway itself injects are not ours and are skipped; access-control keys Hermes would act on are refused; any other unknown key is a warning. x-error / x-errors / x-hint are the user-facing messages ('glasses.<path>: <x-error> (got <value>) — <x-hint>'); a string value is shown only when x-echo is true and it contains neither '@' nor '://' (it could carry credentials); URL- and credential-capable keys (public_url, meeting.endpoint, meeting.provider, meeting.llm.*) are never echoed. x-status: planned marks a key whose feature is not built yet: it is accepted and validated but has no effect.",
+  "type": "object",
+  "additionalProperties": false,
+  "x-error": "must be a mapping",
+  "x-hint": "gateway.platforms.glasses.extra holds the settings as key: value pairs",
+  "properties": {
+    "host": {
+      "description": "Bind address of the plugin's WebSocket listener: a loopback IP literal only; hostnames, localhost included, are refused. A TLS edge in front of it serves the public side.",
+      "x-status": "planned",
+      "type": "string",
+      "maxLength": 45,
+      "default": "127.0.0.1",
+      "x-error": "must be a loopback IP literal (127.0.0.1 or ::1)",
+      "x-hint": "the plugin never binds a public or wildcard address; put a TLS edge in front of it",
+      "x-echo": true
+    },
+    "port": {
+      "description": "Loopback WebSocket port the TLS edge proxies /ws to.",
+      "x-status": "planned",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 8765,
+      "x-error": "must be an integer 1-65535",
+      "x-hint": "the loopback port your TLS edge proxies /ws to, e.g. 8765"
+    },
+    "bridge_port": {
+      "description": "Loopback port of the phone bridge; must differ from port.",
+      "x-status": "planned",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "default": 8766,
+      "x-error": "must be an integer 1-65535",
+      "x-errors": {
+        "x-differ": "must differ from port"
+      },
+      "x-hint": "a second free loopback port, e.g. 8766"
+    },
+    "state_dir": {
+      "description": "Absolute directory for the plugin state (device registry, device CA, outbox); empty or null = $HERMES_HOME/glasses.",
+      "x-status": "planned",
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 4096,
+      "default": null,
+      "x-error": "must be an absolute path without surrounding whitespace or control characters, or empty",
+      "x-hint": "leave it empty to use $HERMES_HOME/glasses",
+      "x-echo": true
+    },
+    "public_url": {
+      "description": "Public wss:// URL the app connects to (carried in the enrolment QR); stored normalised.",
+      "x-status": "planned",
+      "type": "string",
+      "maxLength": 2048,
+      "default": "",
+      "x-error": "must be empty or a wss:// URL (printable ASCII, no whitespace) with a host, an optional port 1-65535, and no credentials, query or fragment",
+      "x-hint": "the wss://<host>/<path> URL of your TLS edge, without user:password@"
+    },
+    "lanes": {
+      "description": "Global lane allowlist (plus per-device lanes); [] = per-device lanes only. At most 32 (= protocol welcome.lanes maxItems).",
+      "x-status": "planned",
+      "type": "array",
+      "maxItems": 32,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/lane"
+      },
+      "default": [
+        "assistant"
+      ],
+      "x-error": "must be a list of lane names",
+      "x-errors": {
+        "maxItems": "must have at most 32 lanes",
+        "uniqueItems": "must not repeat a lane"
+      },
+      "x-hint": "e.g. [assistant, work]; route each lane with gateway.profile_routes",
+      "x-echo": true
+    },
+    "home_lane": {
+      "description": "Lane of the home channel (glasses:<lane>); empty = no home channel. Must be one of lanes when lanes is not empty.",
+      "x-status": "planned",
+      "type": "string",
+      "maxLength": 40,
+      "pattern": "^(?:(?:glasses:)?[a-z][a-z0-9_-]{0,31})?$",
+      "not": {
+        "pattern": "[\\n\\r\\u0085\\u2028\\u2029]"
+      },
+      "default": "assistant",
+      "x-error": "must be empty or a lane name (or glasses:<lane>) matching ^[a-z][a-z0-9_-]{0,31}$",
+      "x-errors": {
+        "x-in-lanes": "must be one of lanes"
+      },
+      "x-hint": "add it to lanes or pick one of them",
+      "x-echo": true
+    },
+    "client_cert_header": {
+      "description": "HTTP header the TLS edge forwards the client certificate in.",
+      "x-status": "planned",
+      "type": "string",
+      "pattern": "^[A-Za-z0-9-]{1,64}$",
+      "not": {
+        "pattern": "[\\n\\r\\u0085\\u2028\\u2029]"
+      },
+      "default": "X-Client-Cert",
+      "x-error": "must be an HTTP header name (letters, digits, '-'; max 64)",
+      "x-hint": "the header your edge sets, e.g. X-Client-Cert",
+      "x-echo": true
+    },
+    "client_cert_encoding": {
+      "description": "pem-urlescaped (nginx $ssl_client_escaped_cert) or der-base64 (Caddy).",
+      "x-status": "planned",
+      "enum": [
+        "pem-urlescaped",
+        "der-base64"
+      ],
+      "default": "pem-urlescaped",
+      "x-error": "must be one of pem-urlescaped, der-base64",
+      "x-hint": "pem-urlescaped for nginx, der-base64 for Caddy",
+      "x-echo": true
+    },
+    "long_threshold": {
+      "description": "Characters (1-512 = msg.out.text 2048 B // 4) above which an answer goes to the long-answer platform; UTF-8 bytes > 2048 also count as long.",
+      "x-status": "planned",
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 512,
+      "default": 280,
+      "x-error": "must be an integer 1-512",
+      "x-hint": "characters shown on the glasses before an answer goes to the long-answer platform; default 280"
+    },
+    "long_answers": {
+      "description": "Where long answers go.",
+      "x-status": "planned",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "platform": {
+          "description": "Hermes platform that receives long answers (never glasses itself).",
+          "x-status": "planned",
+          "$ref": "#/$defs/platform",
+          "not": {
+            "const": "glasses"
+          },
+          "default": "telegram",
+          "x-error": "must be another platform than glasses",
+          "x-hint": "long answers would loop back to the glasses; use e.g. telegram",
+          "x-echo": true
+        }
+      },
+      "default": {
+        "platform": "telegram"
+      },
+      "x-error": "must be a mapping with the key platform",
+      "x-hint": "e.g. long_answers: {platform: telegram}"
+    },
+    "edge": {
+      "description": "Your TLS edge, for glasses-admin hints.",
+      "x-status": "planned",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "x-status": "planned",
+          "description": "Software of your TLS edge; selects the reload hint glasses-admin prints.",
+          "enum": [
+            "nginx",
+            "caddy",
+            "other"
+          ],
+          "default": "nginx",
+          "x-error": "must be one of nginx, caddy, other",
+          "x-hint": "selects the reload hint glasses-admin prints",
+          "x-echo": true
+        },
+        "tls_dir": {
+          "description": "Absolute directory the edge reads the device CA + CRL from; empty = unset.",
+          "x-status": "planned",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 4096,
+          "default": "",
+          "x-error": "must be an absolute path without surrounding whitespace or control characters, or empty",
+          "x-hint": "e.g. /etc/nginx/glasses",
+          "x-echo": true
+        }
+      },
+      "default": {
+        "kind": "nginx",
+        "tls_dir": ""
+      },
+      "x-error": "must be a mapping with the keys kind, tls_dir",
+      "x-hint": "e.g. edge: {kind: nginx, tls_dir: /etc/nginx/glasses}"
+    },
+    "meeting": {
+      "description": "Settings of meeting mode. Off unless enabled here and per device.",
+      "x-status": "planned",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "x-status": "planned",
+          "type": "boolean",
+          "default": false,
+          "x-error": "must be true or false"
+        },
+        "provider": {
+          "x-status": "planned",
+          "enum": [
+            "soniox",
+            "deepgram",
+            "speechmatics"
+          ],
+          "default": "soniox",
+          "x-error": "must be one of soniox, deepgram, speechmatics",
+          "x-hint": "the key comes from the profile .env under the provider's variable name"
+        },
+        "endpoint": {
+          "description": "Provider host (region); empty = the provider default.",
+          "x-status": "planned",
+          "type": "string",
+          "maxLength": 253,
+          "pattern": "^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*)?$",
+          "not": {
+            "pattern": "[\\n\\r\\u0085\\u2028\\u2029]"
+          },
+          "default": "",
+          "x-error": "must be empty or a lower-case DNS host name",
+          "x-hint": "empty = the provider default endpoint"
+        },
+        "language_hints": {
+          "description": "0-8 BCP 47 tags; [] = auto-detect (generic default).",
+          "x-status": "planned",
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/langTag"
+          },
+          "default": [],
+          "x-error": "must be a list of language tags",
+          "x-errors": {
+            "maxItems": "must have at most 8 language tags",
+            "uniqueItems": "must not repeat a language tag"
+          },
+          "x-hint": "e.g. [en, fr]; [] = auto-detect",
+          "x-echo": true
+        },
+        "transcript_days": {
+          "x-status": "planned",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 3650,
+          "default": 30,
+          "x-error": "must be an integer 0-3650",
+          "x-hint": "days transcripts are kept"
+        },
+        "max_minutes": {
+          "x-status": "planned",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1440,
+          "default": 180,
+          "x-error": "must be an integer 1-1440",
+          "x-hint": "longest single meeting in minutes"
+        },
+        "daily_hours": {
+          "x-status": "planned",
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 24,
+          "default": 0,
+          "x-error": "must be an integer 0-24",
+          "x-hint": "daily cap of meeting hours; 0 = no daily cap"
+        },
+        "live_notes": {
+          "x-status": "planned",
+          "type": "boolean",
+          "default": false,
+          "x-error": "must be true or false"
+        },
+        "llm": {
+          "description": "Optional provider/model passed to the plugin LLM API; empty = the deployer's active model.",
+          "x-status": "planned",
+          "type": [
+            "object",
+            "null"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "provider": {
+              "x-status": "planned",
+              "type": "string",
+              "maxLength": 64,
+              "pattern": "^(?:[a-z0-9][a-z0-9_.-]{0,63})?$",
+              "not": {
+                "pattern": "[\\n\\r\\u0085\\u2028\\u2029]"
+              },
+              "default": "",
+              "x-error": "must be empty or a provider name (lower-case letters, digits, '_', '.', '-')"
+            },
+            "model": {
+              "x-status": "planned",
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^[!-~]*$",
+              "not": {
+                "pattern": "[\\n\\r\\u0085\\u2028\\u2029]"
+              },
+              "default": "",
+              "x-error": "must be empty or a model name (printable ASCII, no spaces)"
+            }
+          },
+          "default": {},
+          "x-error": "must be a mapping with the keys provider, model"
+        }
+      },
+      "default": {},
+      "x-error": "must be a mapping of meeting settings",
+      "x-hint": "reserved for meeting mode; leave it out until you use it"
+    }
+  },
+  "$defs": {
+    "lane": {
+      "description": "Lane name; same pattern as the protocol lane (protocol/envelope.schema.json).",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+      "maxLength": 32,
+      "not": {
+        "pattern": "[\\n\\r\\u0085\\u2028\\u2029]"
+      },
+      "x-error": "must be a lane name matching ^[a-z][a-z0-9_-]{0,31}$",
+      "x-hint": "lower-case letters, digits, '_' and '-', starting with a letter",
+      "x-echo": true
+    },
+    "platform": {
+      "description": "Hermes platform name; same pattern as the protocol platform.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+      "maxLength": 32,
+      "not": {
+        "pattern": "[\\n\\r\\u0085\\u2028\\u2029]"
+      },
+      "x-error": "must be a Hermes platform name matching ^[a-z][a-z0-9_-]{0,31}$",
+      "x-hint": "e.g. telegram",
+      "x-echo": true
+    },
+    "langTag": {
+      "description": "BCP 47 language tag; same pattern as the protocol langTag.",
+      "type": "string",
+      "maxLength": 35,
+      "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$",
+      "not": {
+        "pattern": "[\\n\\r\\u0085\\u2028\\u2029]"
+      },
+      "x-error": "must be a language tag such as en or pt-BR",
+      "x-hint": "BCP 47, e.g. en, fr, pt-BR",
+      "x-echo": true
+    }
+  }
+}

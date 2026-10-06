@@ -1,0 +1,27 @@
+# Project-local toolchains, clones, venvs, caches (never commit)
+.local/
+
+# Private operator overlay: each deployer's own values (hosts, paths, certificates); never part of the code tree
+deploy/local/
+
+# Environment files (may hold secrets)
+.env*
+
+# Build outputs
+.gradle/
+build/
+local.properties
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+.coverage.*
+
+# Artifacts and signing material
+*.apk
+*.aab
+*.jks
+*.keystore
+*.key
+*.p12
+keystore.properties

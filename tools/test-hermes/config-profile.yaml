@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: Apache-2.0
+# Test-instance config for a NAMED test profile, rendered by setup_home.sh (@LLM_PORT@ = mock LLM port).
+# No glasses platform here: only the default profile owns the adapter.
+model:
+  default: mock-model
+  provider: mock
+providers:
+  mock:
+    api: http://127.0.0.1:@LLM_PORT@/v1
+    api_key: not-a-secret-mock
+    transport: chat_completions
+    default_model: mock-model
+    discover_models: false
+    context_length: 131072
+    models:
+      mock-model:
+        context_length: 131072
+approvals:
+  mode: manual
+  timeout: 60
+# Plugin platforms get NO tools by default (default toolset "hermes-glasses" does not exist) -> explicit list.
+platform_toolsets:
+  glasses: [terminal, file, delegation, kanban, clarify, todo, memory, session_search]

@@ -1,0 +1,5 @@
+# Commit gate start: the full hash of the starting point of the commit-subject check.
+# `check_hygiene.py --commits` checks the subjects of <this commit>..HEAD; older commits are exempt history.
+# The merge step writes the hash on the line below in a follow-up commit (a commit cannot hold its own hash):
+#   git rev-parse HEAD >> tools/quality/commit-gate-start.txt
+# Until a hash is recorded, `--commits` without a range exits 2 (fails closed).

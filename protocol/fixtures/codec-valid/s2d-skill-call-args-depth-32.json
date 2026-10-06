@@ -1,0 +1,78 @@
+{
+  "v": 1,
+  "id": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+  "type": "skill.call",
+  "ts": "2026-10-03T18:00:00Z",
+  "body": {
+    "callId": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+    "skill": "audio.volume_set",
+    "args": {
+      "n": {
+        "n": {
+          "n": {
+            "n": {
+              "n": {
+                "n": {
+                  "n": {
+                    "n": {
+                      "n": {
+                        "n": {
+                          "n": {
+                            "n": {
+                              "n": {
+                                "n": {
+                                  "n": {
+                                    "n": {
+                                      "n": {
+                                        "n": {
+                                          "n": {
+                                            "n": {
+                                              "n": {
+                                                "n": {
+                                                  "n": {
+                                                    "n": {
+                                                      "n": {
+                                                        "n": {
+                                                          "n": {
+                                                            "n": {
+                                                              "n": {
+                                                                "n": {
+                                                                  "n": {
+                                                                    "leaf": 1
+                                                                  }
+                                                                }
+                                                              }
+                                                            }
+                                                          }
+                                                        }
+                                                      }
+                                                    }
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "mode": "act",
+    "deadlineMs": 10000
+  },
+  "seq": 7
+}

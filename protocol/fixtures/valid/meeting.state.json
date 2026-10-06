@@ -1,0 +1,13 @@
+{
+  "v": 1,
+  "id": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+  "type": "meeting.state",
+  "ts": "2026-10-03T18:00:00Z",
+  "body": {
+    "meetingId": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+    "state": "active",
+    "provider": "soniox",
+    "elapsedMs": 1000
+  },
+  "seq": 7
+}

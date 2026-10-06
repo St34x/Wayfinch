@@ -1,0 +1,16 @@
+{
+  "v": 1,
+  "id": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+  "type": "clarify.request",
+  "ts": "2026-10-03T18:00:00Z",
+  "body": {
+    "clarifyId": "clr-1",
+    "question": "Which one?",
+    "choices": [
+      "A",
+      "B"
+    ],
+    "detached": false
+  },
+  "seq": 7
+}

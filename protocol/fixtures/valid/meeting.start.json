@@ -1,0 +1,17 @@
+{
+  "v": 1,
+  "id": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+  "type": "meeting.start",
+  "ts": "2026-10-03T18:00:00Z",
+  "body": {
+    "meetingId": "01JABCDEFGHJKMNPQRSTVWXYZ0",
+    "langHints": [
+      "ru",
+      "uk",
+      "en",
+      "fr"
+    ],
+    "hintLevel": "medium",
+    "mic": "glasses"
+  }
+}

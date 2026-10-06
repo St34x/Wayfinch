@@ -1,0 +1,15 @@
+# SPDX-License-Identifier: Apache-2.0
+name: glasses
+label: Glasses
+kind: platform
+version: 0.1.0
+description: >
+  Gateway platform for a smart-glasses companion app (Wayfinch). Binds a loopback
+  port only; a TLS edge in front of it terminates the public connection. Settings
+  live under gateway.platforms.glasses.extra (see config.py).
+author: The Wayfinch Authors
+requires_env: []
+optional_env:
+  - name: GLASSES_ALLOWED_USERS
+    description: "Comma-separated device ids allowed to talk to the gateway"
+    password: false
