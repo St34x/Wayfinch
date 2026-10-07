@@ -317,6 +317,6 @@ def test_live_against_real_hermes_in_a_scratch_home(mode):
         "error: profile work: the glasses tool set differs from telegram",
     ]
     assert len(errors) == len(expected), proc.stdout
-    for line, prefix in zip(errors, expected):
+    for line, prefix in zip(errors, expected, strict=True):
         assert line.startswith(prefix), (line, proc.stdout)
     assert os.path.isdir(base)

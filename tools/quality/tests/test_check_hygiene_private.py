@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Tests of rule (d) of tools/quality/check_hygiene.py (T1.141): no private reference in the published tree.
+"""Tests of rule (d) of tools/quality/check_hygiene.py: no private reference in the published tree.
 
 Planted references are assembled at run time (`ADR`, `ADR_DIR`, `TEAM`, `QA`, `REVIEW`) so this file holds none
 and needs no exemption. The real tree is checked by test_check_hygiene_cli.py::test_real_tree_is_clean.
@@ -38,18 +38,18 @@ EXEMPT = sorted(hy.PRIVATE_FOLDER_EXEMPT)
 @pytest.mark.parametrize(
     ("path", "line"),
     [
-        ("a.py", f"# see {ADR}-015 for the reasoning"),
-        ("a.py", f'"""Registry ({ADR}-005, {ADR}-025 step 1)."""'),
-        ("a.py", f"# ({ADR}-003/020/022)"),
-        ("docs/x.md", f"Decided in [the record]({TEAM}{ADR_DIR}015-long-answers.md)."),
-        ("docs/x.md", f"Decided in {ADR_DIR}015 of the team docs."),
-        ("schema.json", f'  "description": "Never expires ({ADR}-024)."'),
-        ("a.py", f"# open finding in {TEAM}{QA}-T1.98.md"),
+        ("a.py", f"# see {ADR}-942 for the reasoning"),
+        ("a.py", f'"""Registry ({ADR}-941, {ADR}-943 step 1)."""'),
+        ("a.py", f"# ({ADR}-944/945/946)"),
+        ("docs/x.md", f"Decided in [the record]({TEAM}{ADR_DIR}942-example-topic.md)."),
+        ("docs/x.md", f"Decided in {ADR_DIR}942 of the team docs."),
+        ("schema.json", f'  "description": "Example value ({ADR}-947)."'),
+        ("a.py", f"# open finding in {TEAM}{QA}-T9.01.md"),
         ("a.py", f"# the {TEAM.rstrip('/')} folder holds the notes"),
-        ("Makefile", f"# {TEAM}kb/INDEX.md"),
-        ("tests/t.py", f"# fix round of {REVIEW}-T1.04 + {QA}-T1.04"),
-        ("tests/t.py", f"# {QA}-T1.06a sub-id report"),
-        ("tests/t.py", f"# {QA}-P.04 and {QA}-S05 reports"),
+        ("Makefile", f"# {TEAM}notes/INDEX.md"),
+        ("tests/t.py", f"# fix round of {REVIEW}-T9.02 + {QA}-T9.02"),
+        ("tests/t.py", f"# {QA}-T9.03a sub-id report"),
+        ("tests/t.py", f"# {QA}-P.99 and {QA}-S99 reports"),
     ],
 )
 def test_private_reference_fails(path: str, line: str) -> None:
@@ -61,19 +61,19 @@ def test_private_reference_fails(path: str, line: str) -> None:
 @pytest.mark.parametrize(
     "ref",
     [
-        f"{ADR.lower()}-015",
-        f"{ADR.title()}-015",
-        f"{ADR} 015",
-        f"{ADR}015",
-        f"{ADR}/015",
-        f"{ADR} #15",
-        f"{ADR}_015",
-        f"{TEAM.upper()}kb",
-        f"{TEAM.title()}kb",
-        f"{QA.upper()}-T1.98.md",
-        f"{REVIEW.title()}-T1.04",
-        f"{QA}-t1.98",
-        f"{QA}_T1.99.md",
+        f"{ADR.lower()}-942",
+        f"{ADR.title()}-942",
+        f"{ADR} 942",
+        f"{ADR}942",
+        f"{ADR}/942",
+        f"{ADR} #942",
+        f"{ADR}_942",
+        f"{TEAM.upper()}notes",
+        f"{TEAM.title()}notes",
+        f"{QA.upper()}-T9.01.md",
+        f"{REVIEW.title()}-T9.02",
+        f"{QA}-t9.01",
+        f"{QA}_T9.04.md",
     ],
 )
 def test_spelling_and_case_variants_fail(ref: str) -> None:
@@ -81,7 +81,7 @@ def test_spelling_and_case_variants_fail(ref: str) -> None:
 
 
 @pytest.mark.parametrize(
-    "path", [f"docs/{QA}-T1.98.md", f"docs/{ADR_DIR}015-x.md", f"docs/{TEAM}x.md", f"docs/{REVIEW.title()}_T1.04.md"]
+    "path", [f"docs/{QA}-T9.01.md", f"docs/{ADR_DIR}942-x.md", f"docs/{TEAM}x.md", f"docs/{REVIEW.title()}_T9.02.md"]
 )
 def test_private_path_name_fails(path: str) -> None:
     findings = hy.private_name_findings(path)
@@ -101,7 +101,7 @@ def test_ordinary_path_name_passes(path: str) -> None:
         "address, readr/1 and xadr/2 are not decision records",
         "teams, .teamcity, my-team/ and steam/ are other words",
         f"{QA}-tests and review-board are no report names",
-        "Purpose: the README of a module (T1.103)",
+        "Purpose: the README of a module (T9.05)",
     ],
 )
 def test_look_alikes_pass(line: str) -> None:
@@ -109,15 +109,15 @@ def test_look_alikes_pass(line: str) -> None:
 
 
 def test_one_finding_per_reference() -> None:
-    findings = hy.private_ref_findings("a.py", f"# {ADR}-001 and {ADR}-002, {TEAM}x\n")
+    findings = hy.private_ref_findings("a.py", f"# {ADR}-941 and {ADR}-942, {TEAM}x\n")
     assert len(findings) == 3
 
 
 @pytest.mark.parametrize("path", EXEMPT)
 def test_exempt_gate_file_may_name_the_folder_only(path: str) -> None:
     assert hy.private_ref_findings(path, f"skip {TEAM}* here\n") == []
-    assert len(hy.private_ref_findings(path, f"# {ADR}-021\n")) == 1
-    assert len(hy.private_ref_findings(path, f"# {TEAM}{QA}-T1.98.md\n")) == 1
+    assert len(hy.private_ref_findings(path, f"# {ADR}-948\n")) == 1
+    assert len(hy.private_ref_findings(path, f"# {TEAM}{QA}-T9.01.md\n")) == 1
 
 
 @pytest.mark.parametrize("path", EXEMPT)
@@ -164,7 +164,7 @@ def _run(repo: Path) -> subprocess.CompletedProcess[str]:
 
 
 def test_cli_planted_reference_fails(tmp_path: Path) -> None:
-    repo = _repo(tmp_path, {"pkg/a.py": f"x = 1\n# see {TEAM}{QA}-T1.98.md\n", "README.md": f"See {ADR}-029.\n"})
+    repo = _repo(tmp_path, {"pkg/a.py": f"x = 1\n# see {TEAM}{QA}-T9.01.md\n", "README.md": f"See {ADR}-949.\n"})
     done = _run(repo)
     assert done.returncode == 1, (done.stdout, done.stderr)
     assert "pkg/a.py:2: private reference" in done.stderr
@@ -172,13 +172,13 @@ def test_cli_planted_reference_fails(tmp_path: Path) -> None:
 
 
 def test_cli_private_path_name_fails(tmp_path: Path) -> None:
-    repo = _repo(tmp_path, {f"docs/{QA.upper()}-T1.98.md": "Plain text.\n"})
+    repo = _repo(tmp_path, {f"docs/{QA.upper()}-T9.01.md": "Plain text.\n"})
     done = _run(repo)
     assert done.returncode == 1, (done.stdout, done.stderr)
-    assert f"docs/{QA.upper()}-T1.98.md: private reference" in done.stderr
+    assert f"docs/{QA.upper()}-T9.01.md: private reference" in done.stderr
 
 
 def test_cli_private_folder_itself_is_not_checked(tmp_path: Path) -> None:
-    repo = _repo(tmp_path, {f"{TEAM}{ADR_DIR}029.md": f"# {ADR}-029, see {TEAM}kb/\n", "a.py": "x = 1\n"})
+    repo = _repo(tmp_path, {f"{TEAM}{ADR_DIR}949.md": f"# {ADR}-949, see {TEAM}notes/\n", "a.py": "x = 1\n"})
     done = _run(repo)
     assert done.returncode == 0, done.stderr

@@ -25,6 +25,3 @@ partial_branches =
 # needs an entry; an entry that no longer matches the measurement (dropped or raised) or whose file reaches the
 # minimum fails. The task that tests the file deletes its own block. New code never gets an entry.
 [wayfinch:coverage-ratchet]
-
-# T1.113
-hermes-plugin/glasses/adapter.py = 8

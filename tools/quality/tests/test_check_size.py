@@ -11,6 +11,7 @@ from types import ModuleType
 import pytest
 
 QUALITY = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(QUALITY))  # check_size.py imports size_sh.py from its own directory
 GIT = shutil.which("git") or "git"
 
 
@@ -179,7 +180,8 @@ def test_sh_brace_on_the_next_line_is_measured(repo: Repo, capsys: pytest.Captur
 
 
 def test_heredoc_brace_at_column_0_does_not_end_the_function(repo: Repo, capsys: pytest.CaptureFixture[str]) -> None:
-    doc = "\tcat <<EOF\n{\n}\nEOF\n\tcat <<-'END' >x\n\t}\n\tEND\n"  # review probe: was measured 33
+    # Brace lines inside heredoc bodies (plain and `<<-`) are text, not the end of the function.
+    doc = "\tcat <<EOF\n{\n}\nEOF\n\tcat <<-'END' >x\n\t}\n\tEND\n"
     body = "".join(f"\techo {i}\n" for i in range(28))
     repo.add("t.sh", "f() {\n" + body + doc + body + "}\n")
     rc, out = repo.run(capsys)

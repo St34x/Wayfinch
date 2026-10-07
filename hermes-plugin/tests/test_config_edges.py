@@ -1,22 +1,18 @@
 # SPDX-License-Identifier: Apache-2.0
 """Edge cases and hostile inputs for the glasses plugin config, on top of test_config.py.
 
-Hosts, ports, defaults, types, strict strings, the allow-all gate and the Hermes import boundary.
+Hosts, ports, defaults, types and strict strings.
 """
 
 from __future__ import annotations
 
-import subprocess
-import sys
-import textwrap
+import dataclasses
 from types import SimpleNamespace
 
 import pytest
 
 import glasses
 from glasses import config as gcfg
-
-from conftest import PLUGIN_ROOT
 
 
 def pc(extra=None, enabled=True):
@@ -301,7 +297,7 @@ def test_validate_config_does_not_mutate_extra(no_allow_all):
 def test_defaults_are_not_shared_mutable_state():
     cfg = gcfg.load({})
     assert isinstance(cfg.lanes, tuple)
-    with pytest.raises(Exception):
+    with pytest.raises(dataclasses.FrozenInstanceError):
         cfg.port = 1  # frozen dataclass
     gcfg.check({"edge": {"kind": "caddy"}})
     assert gcfg.DEFAULTS["edge"] == {"kind": "nginx", "tls_dir": ""}
@@ -371,152 +367,3 @@ def test_contract_empty_query_or_fragment_marker_accepted():
 def test_long_answers_platform_must_not_be_glasses_itself():
     # Long answers are forwarded to ANOTHER platform; glasses -> glasses would loop.
     assert errs({"long_answers": {"platform": "glasses"}}, "long_answers.platform")
-
-
-# --------------------------------------------------------------------------------------------
-# GLASSES_ALLOW_ALL_USERS: any non-blank value refuses the platform (stricter than Hermes)
-# --------------------------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("value", ["0", "false", "False", "no", "off", "n", " 0 ", "true", "TRUE", "1", "yes", "*"])
-def test_allow_all_any_non_blank_value_refuses(monkeypatch, value):
-    # Hermes treats only true/1/yes as allow-all (gateway/authz_mixin.py _TRUTHY); the plugin refuses ANY value,
-    # so even "0"/"false" fail closed — documented as "must never be set".
-    monkeypatch.setenv("GLASSES_ALLOW_ALL_USERS", value)
-    assert gcfg.allow_all_requested() is True
-    assert glasses.validate_config(pc({})) is False
-    assert glasses.is_connected(pc({}, enabled=True)) is False
-
-
-@pytest.mark.parametrize("value", ["", " ", "\t", "\n"])
-def test_allow_all_blank_is_unset(monkeypatch, value):
-    monkeypatch.setenv("GLASSES_ALLOW_ALL_USERS", value)
-    assert glasses.validate_config(pc({})) is True
-
-
-def test_allow_all_refusal_is_logged_without_value(monkeypatch, caplog):
-    monkeypatch.setenv("GLASSES_ALLOW_ALL_USERS", "false-but-secret-looking-value")
-    with caplog.at_level("WARNING"):
-        assert glasses.validate_config(pc({})) is False
-    assert "GLASSES_ALLOW_ALL_USERS" in caplog.text
-    assert "secret-looking" not in caplog.text
-
-
-def test_allow_all_explicit_environ_mapping():
-    assert gcfg.allow_all_requested({"GLASSES_ALLOW_ALL_USERS": "false"}) is True
-    assert gcfg.allow_all_requested({"GLASSES_ALLOW_ALL_USERS": ""}) is False
-    assert gcfg.allow_all_requested({}) is False
-
-
-def test_allowed_users_env_does_not_affect_validation(monkeypatch, no_allow_all):
-    for value in ("", "dev_1,dev_2", "\n"):
-        monkeypatch.setenv("GLASSES_ALLOWED_USERS", value)
-        assert glasses.validate_config(pc({})) is True
-    # A wildcard allowlist is refused like the allow-all switch.
-    monkeypatch.setenv("GLASSES_ALLOWED_USERS", "*")
-    assert glasses.validate_config(pc({})) is False
-
-
-# --------------------------------------------------------------------------------------------
-# importing the package never imports Hermes (fresh interpreter, import blocker)
-# --------------------------------------------------------------------------------------------
-
-# Top-level modules/packages of the pinned Hermes tree (hermes-agent @ a4648c5f58): anything named here or
-# starting with "hermes" is Hermes.
-HERMES_TOP_LEVEL = (
-    "acp_adapter",
-    "agent",
-    "batch_runner",
-    "cli",
-    "cron",
-    "gateway",
-    "mcp_serve",
-    "mini_swe_runner",
-    "model_tools",
-    "pm",
-    "providers",
-    "registration_lifecycle",
-    "run_agent",
-    "tools",
-    "toolsets",
-    "toolset_distributions",
-    "trajectory_compressor",
-    "tui_gateway",
-)
-
-_PROBE = textwrap.dedent("""
-    import importlib.abc, sys
-    HERMES = set({names!r})
-    attempts = []
-
-    class Block(importlib.abc.MetaPathFinder):
-        def find_spec(self, name, path=None, target=None):
-            top = name.split(".", 1)[0]
-            if top in HERMES or top.startswith("hermes"):
-                attempts.append(name)
-                raise ImportError("blocked Hermes import: " + name)
-            return None
-
-    sys.meta_path.insert(0, Block())
-    sys.path.insert(0, {root!r})
-    import glasses, glasses.config
-    from types import SimpleNamespace
-
-    class Ctx:
-        def register_platform(self, **kw):
-            self.kw = kw
-
-    ctx = Ctx()
-    glasses.register(ctx)
-    assert ctx.kw["name"] == "glasses"
-    glasses.validate_config(SimpleNamespace(enabled=True, extra={{"host": "0.0.0.0"}}))
-    glasses.is_connected(SimpleNamespace(enabled=True, extra={{}}))
-    glasses.check_requirements()
-    glasses.config.load({{}})
-    loaded = sorted(m for m in sys.modules if m.split(".", 1)[0] in HERMES or m.startswith("hermes"))
-    assert "glasses.adapter" not in sys.modules, "adapter imported eagerly"
-    print("ATTEMPTS", attempts)
-    print("LOADED", loaded)
-""")
-
-
-def test_import_register_validate_never_import_hermes_in_fresh_interpreter():
-    code = _PROBE.format(names=HERMES_TOP_LEVEL, root=str(PLUGIN_ROOT))
-    proc = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True, timeout=60)
-    assert proc.returncode == 0, proc.stderr
-    assert "ATTEMPTS []" in proc.stdout, proc.stdout
-    assert "LOADED []" in proc.stdout, proc.stdout
-
-
-def test_adapter_module_is_the_only_hermes_boundary():
-    # adapter.py needs Hermes; in a Hermes-free interpreter importing it fails, while the package works.
-    code = (
-        "import sys; sys.path.insert(0, %r)\n"
-        "import glasses\n"
-        "try:\n"
-        "    import glasses.adapter\n"
-        "except ImportError as e:\n"
-        "    print('IMPORT_ERROR', type(e).__name__)\n"
-        "else:\n"
-        "    print('IMPORTED')\n" % str(PLUGIN_ROOT)
-    )
-    proc = subprocess.run([sys.executable, "-I", "-c", code], capture_output=True, text=True, timeout=60)
-    assert proc.returncode == 0, proc.stderr
-    assert "IMPORT_ERROR" in proc.stdout, proc.stdout
-
-
-def test_adapter_factory_imports_lazily():
-    call = {}
-
-    class Ctx:
-        def register_platform(self, **kw):
-            call.update(kw)
-
-    sys.modules.pop("glasses.adapter", None)
-    glasses.register(Ctx())
-    factory = call["adapter_factory"]
-    assert "glasses.adapter" not in sys.modules
-    # Calling the factory is what pulls in Hermes; in the dev venv that must fail loudly, not silently.
-    with pytest.raises(ImportError):
-        factory(pc({}))
-    sys.modules.pop("glasses.adapter", None)

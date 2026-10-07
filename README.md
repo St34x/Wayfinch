@@ -59,10 +59,10 @@ hand):
 | Protocol | Envelope v1 as JSON Schema 2020-12 (27 frame types, UTF-8 byte limits, delivery rules, close codes), golden valid/invalid fixtures and codec edge-case fixtures | [`protocol/`](protocol/) |
 | Code generation | In-tree, stdlib-only generators: protocol schema → Python `TypedDict`s, and plugin config schema → [configuration reference](docs/reference/config.md); committed output is checked for freshness | [`tools/codegen/`](tools/codegen/), [`hermes-plugin/glasses/generated/`](hermes-plugin/glasses/generated/) |
 | Plugin skeleton | Hermes platform registration; an adapter that **fails closed** (reports "not connected", delivers nothing) until the transport lands; refusal of any allow-all / wildcard user setting | [`hermes-plugin/glasses/`](hermes-plugin/glasses/) |
-| Plugin config | JSON Schema for the plugin config with precise error messages and a generated [configuration reference](docs/reference/config.md); `config check` CLI (static checks, plus `--live` checks against a Hermes install) | `config.schema.json`, `config.py`, `admin.py` |
+| Plugin config | JSON Schema for the plugin config with precise error messages and a generated [configuration reference](docs/reference/config.md); `config check` CLI (static checks, plus `--live` checks against a Hermes install) | `config.schema.json`, `config*.py`, `admin.py` |
 | Device registry | Token stored only as SHA-256, constant-time verification, revocation with tombstones, atomic `0600` writes, fails closed on a corrupt or foreign-owned file | `registry.py` |
 | Test harness | Scripts for an isolated test instance of a pinned Hermes Agent with a minimal test platform and a mock LLM on loopback ports, never touching a real install ([setup](docs/test-hermes.md)); `make test` checks the scripts against a fake `hermes` | [`tools/test-hermes/`](tools/test-hermes/), [`tools/mock-llm/`](tools/mock-llm/) |
-| Quality gates | Secret scan, SPDX headers, size limits, repo hygiene (task ids on `TODO`s, unique glossary terms, no private references), module READMEs, ruff, mypy `--strict` (with a ratchet for modules not typed yet), the Python 3.11 floor, import boundaries, codegen freshness (protocol types and the configuration reference), plugin coverage (core files ≥90 %, other files ≥70 %; `adapter.py` is held at its measured value by an exact ratchet entry until its tests land), hash-pinned installs | [`mk/`](mk/), [`tools/quality/`](tools/quality/) |
+| Quality gates | Secret scan, SPDX headers, size limits, repo hygiene (task ids on `TODO`s, unique glossary terms, no private references), module READMEs, ruff, mypy `--strict` (with a ratchet for modules not typed yet), the Python 3.11 floor, import boundaries, codegen freshness (protocol types and the configuration reference), plugin coverage (core files ≥90 %, other files ≥70 %), hash-pinned installs | [`mk/`](mk/), [`tools/quality/`](tools/quality/) |
 
 **Planned** (designed, not built): the envelope codec and the WebSocket server with device authentication; the outbox;
 approval and clarify cards; the voice path; the admin CLI for the device CA, enrolment and revocation; the long-answer
@@ -109,7 +109,7 @@ written down:
   (`tools/quality/check_size.py` + ruff).
 - **Lint and format:** ruff, with one pinned configuration for all Python code.
 - **Types:** `mypy --strict` over the plugin and the tools, with a ratchet: modules listed in the baseline blocks of
-  `mypy.ini` (today four plugin modules and two test-only tools) are exempt until their cleanup task lands, and new
+  `mypy.ini` (today one test-only tool, the minimal test platform) are exempt until their cleanup task lands, and new
   modules never get a block. Hermes is not installed in the dev venv, so Hermes imports are untyped (`Any`).
 - **Supported Python:** the plugin runs inside the Hermes venv and supports exactly the range Hermes declares in
   `requires-python`, 3.11 to 3.14 (the Hermes commit pinned for the live tests itself needs Python 3.14; an installed

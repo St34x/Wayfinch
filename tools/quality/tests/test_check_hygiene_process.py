@@ -37,22 +37,22 @@ REVIEW = "re" + "view"
 NOQA = "no" + "qa"
 
 PLANTED = [
-    f"{QA}-W2b-r2 finding: --live echoes the profile name",
-    f"see {QA_L}-w2a",
-    f"{QA_L}_w2b fixtures",
-    f"# {QA} S1: allow-all only in a profile .env",
-    f"{QA} {ROUND} 2 for the schema",
+    f"{QA}-W7c-r3 finding: the widget shows a stale value",
+    f"see {QA_L}-w7a",
+    f"{QA_L}_w7c fixtures",
+    f"# {QA} S99: example.com is the only allowed host",
+    f"{QA} {ROUND} 2 for the parser",
     f"{QA_L} {ROUND} 2: x",
     f"{REVIEW}/{QA} {ROUND} 1",
     f"{REVIEW} {ROUND} 1",
-    f"{FIX} {ROUND} 1: values are never echoed",
-    f"T1.99 {FIX} {ROUND}s 1 and 2",
+    f"{FIX} {ROUND} 1: empty input is rejected",
+    f"parser {FIX} {ROUND}s 1 and 2",
     f"{FIX}_{ROUND}1",
     f"{FIX}_r1",
     f"{QA_L}_r2",
     f'reason="{QA} r2: gap"',
-    f"{WAVE.title()} 2b {ROUND} 1",
-    f"{WAVE}2a",
+    f"{WAVE.title()} 7c {ROUND} 1",
+    f"{WAVE}7a",
     f"attacks on the {ROUND}-1 fixes",
     f"timestamps ({ROUND}-1 xfails)",
     f"{ROUND} 2 findings",
@@ -95,13 +95,13 @@ def test_look_alike_passes(line: str) -> None:
 @pytest.mark.parametrize(
     "path",
     [
-        f"tests/test_config_{QA_L}.py",
-        f"tests/test_config_{QA_L}2.py",
-        f"tools/tests/test_scan-{QA_L.upper()}.sh",
+        f"tests/test_widget_{QA_L}.py",
+        f"tests/test_widget_{QA_L}2.py",
+        f"tools/tests/test_example-{QA_L.upper()}.sh",
         f"tests/test_{FIX}_{ROUND}1.py",
-        f"tests/test_config_{QA_L}_w2b_r2.py",
-        f"tests/test_config_{FIX}_r1_deps.py",
-        f"protocol/{WAVE}-2a/x.json",
+        f"tests/test_widget_{QA_L}_w7c_r3.py",
+        f"tests/test_widget_{FIX}_r1_deps.py",
+        f"examples/{WAVE}-7a/x.json",
     ],
 )
 def test_process_tag_in_file_name_fails(path: str) -> None:
@@ -130,11 +130,11 @@ def test_cli_flags_process_tags_in_text_and_names(tmp_path: Path) -> None:
     (repo / "docs" / "glossary.md").write_text(
         "# G\n\n| Term | Meaning |\n|---|---|\n| **a** | b |\n", encoding="utf-8"
     )
-    (repo / "test_scan_qa2.py").write_text("x = 1\n", encoding="utf-8")
+    (repo / "test_example_qa2.py").write_text("x = 1\n", encoding="utf-8")
     (repo / "notes.md").write_text(f"Plain.\nSee {QA} {ROUND} 2.\n", encoding="utf-8")
     _git(repo, "init", "-q")
     _git(repo, "add", "-A")
     done = subprocess.run([sys.executable, str(SCRIPT)], cwd=repo, capture_output=True, text=True, check=False)
     assert done.returncode == 1, (done.stdout, done.stderr)
-    assert "test_scan_qa2.py: private reference '_qa2.py' in the path name" in done.stderr
+    assert "test_example_qa2.py: private reference '_qa2.py' in the path name" in done.stderr
     assert "notes.md:2: private reference" in done.stderr

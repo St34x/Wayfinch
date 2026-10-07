@@ -286,13 +286,13 @@ def test_enabled_explicit_injected_by_hermes_is_silent():
 
 
 # --------------------------------------------------------------------------------------------
-# 5. one message cap; the gateway does not split what the long-answer router must see
+# 5. one message cap; the gateway does not split what the planned long-answer router must see
 # --------------------------------------------------------------------------------------------
 
 
 def test_message_cap_is_one_constant_and_byte_safe():
     assert gcfg.MAX_MESSAGE_LENGTH == (65_536 - 1_024) // 6 == 10_752
-    assert gcfg.MAX_MESSAGE_LENGTH >= 8192  # T1.04 review: at least 8192
+    assert gcfg.MAX_MESSAGE_LENGTH >= 8192  # 8192 chars reach send() unsplit (for the planned long-answer router)
     assert gcfg.MAX_MESSAGE_LENGTH > 4096  # above the gateway default it replaces
     assert not hasattr(glasses, "MAX_MESSAGE_LENGTH") or glasses.MAX_MESSAGE_LENGTH == gcfg.MAX_MESSAGE_LENGTH
 

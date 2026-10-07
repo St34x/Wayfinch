@@ -2,8 +2,7 @@
 """Exemptions and edge cases of tools/quality/check_size.py.
 
 Header-marker exemption per file type, here-document edge cases, the "never passes vacuously" property of the
-here-document false positives, and the baseline block rules. The strict xfail pins a known gap
-(a function whose brace line also holds code is never measured); the fix removes the marker.
+here-document false positives, sh functions whose brace line also holds code, and the baseline block rules.
 """
 
 import importlib.util
@@ -16,6 +15,7 @@ from types import ModuleType
 import pytest
 
 QUALITY = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(QUALITY))  # check_size.py imports size_sh.py from its own directory
 GIT = shutil.which("git") or "git"
 
 
@@ -150,12 +150,47 @@ def test_heredoc_false_positives_never_pass(repo: Repo, capsys: pytest.CaptureFi
     assert rc == 1 and "t.sh" in out, out
 
 
-@pytest.mark.xfail(strict=True, reason="known gap: 'f() { cmd' (code after the brace) is never measured")
 @pytest.mark.parametrize("header", ["f() { set -e\n", "f() { cat <<EOF\n}\nEOF\n"])
 def test_code_on_the_brace_line_is_measured(repo: Repo, capsys: pytest.CaptureFixture[str], header: str) -> None:
     repo.add("t.sh", header + sh_body(60) + "}\n")
     rc, out = repo.run(capsys)
     assert rc == 1 and "t.sh::f" in out, out
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("f() { set -e\n\techo x\n}\n", [("f", 3)]),
+        ("f() { a; while x; do b\n\tc; done; return 1; }\n", [("f", 2)]),
+        ("f() { echo ${x}\n\techo y; }\n", [("f", 2)]),
+        ("f() { a # comment with }\n\tb; }\n", [("f", 2)]),
+        ("f() { cat <<EOF\n}\nEOF\n\techo x\n}\n", [("f", 5)]),
+        ("f() ( cd x\n\tls; )\n", [("f", 2)]),
+        ('f() ( x=$(date)\n\techo "$x"\n)\n', [("f", 3)]),
+        ("f()\n{ set -e\n\techo x; }\n", [("f", 3)]),
+        ("f() { echo; }\ng() ( cd x; ls )\nh() { a=${x}; }\n", []),
+        ('f() { a\n\t[ -n "$x" ] || { echo e; exit 1; }\n\tb\n}\n', [("f", 4)]),
+        ("f() { a\n\t{\n\t\tb; }\n\tc; }\n", [("f", 4)]),
+    ],
+)
+def test_code_on_the_brace_line_ends_at_the_matching_close(text: str, expected: list[tuple[str, int]]) -> None:
+    assert cs.sh_functions(text) == expected
+
+
+def test_code_on_the_brace_line_hard_limit_boundary(repo: Repo, capsys: pytest.CaptureFixture[str]) -> None:
+    repo.add("t.sh", "f() { set -e\n" + sh_body(59) + "\techo; }\nok() { set -e\n" + sh_body(58) + "}\n")
+    rc, out = repo.run(capsys)
+    found = [line for line in out.splitlines() if "t.sh::" in line]
+    assert rc == 1 and found[1:] == ["check-size: error: t.sh::f: 61 lines > hard limit 60"], out
+    assert found[0] == "check-size: warning: t.sh::ok: 60 lines > target 40", out
+
+
+def test_one_line_function_closed_before_a_redirection_is_not_measured(
+    repo: Repo, capsys: pytest.CaptureFixture[str]
+) -> None:
+    repo.add("t.sh", "f() { echo; } >&2\n")
+    rc, out = repo.run(capsys)
+    assert rc == 0 and "t.sh::f" not in out and "error" not in out, out
 
 
 # --- baseline block rules ---------------------------------------------------------------------------------------

@@ -16,12 +16,31 @@ from __future__ import annotations
 
 import importlib.util
 import logging
-from typing import Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Protocol
 
 from . import config as _config
 from .config import ALLOWED_USERS_ENV, MAX_MESSAGE_LENGTH, PLATFORM_NAME, validate_config
 
+if TYPE_CHECKING:  # the adapter imports Hermes; never at run time outside the gateway
+    from .adapter import GlassesAdapter, HermesPlatformConfig
+
 logger = logging.getLogger(__name__)
+
+
+class PluginContext(Protocol):
+    """The part of Hermes' plugin context ``register`` uses (``hermes_cli.plugins``)."""
+
+    def register_platform(
+        self,
+        name: str,
+        label: str,
+        adapter_factory: Callable[[HermesPlatformConfig], GlassesAdapter],
+        check_fn: Callable[[], bool],
+        **entry_kwargs: object,
+    ) -> object:
+        """Register a gateway platform; extra keywords go to Hermes' ``PlatformEntry``."""
+
 
 __all__ = ["register", "check_requirements", "validate_config", "is_connected"]
 
@@ -46,7 +65,7 @@ def check_requirements() -> bool:
         return False
 
 
-def is_connected(platform_config: Any) -> bool:
+def is_connected(platform_config: object) -> bool:
     """Configured for use: explicitly enabled in YAML and a valid config (no env auto-enable).
 
     Status screens call this repeatedly, so reasons are logged at DEBUG here (WARNING on build).
@@ -56,13 +75,13 @@ def is_connected(platform_config: Any) -> bool:
     )
 
 
-def _create_adapter(platform_config: Any):
+def _create_adapter(platform_config: HermesPlatformConfig) -> GlassesAdapter:
     from .adapter import GlassesAdapter  # imports Hermes; only inside the gateway
 
     return GlassesAdapter(platform_config)
 
 
-def register(ctx) -> None:
+def register(ctx: PluginContext) -> None:
     """Plugin entry point called by the Hermes plugin manager."""
     ctx.register_platform(
         name=PLATFORM_NAME,

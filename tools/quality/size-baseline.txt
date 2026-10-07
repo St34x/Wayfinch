@@ -4,15 +4,6 @@
 # One block per follow-up task: a "# T<id>" header line, its entries (same id), a blank line. The measured length
 # must equal the entry; the task that fixes the file deletes its own block. New code never gets an entry.
 
-# T1.111
-hermes-plugin/glasses/config.py:595 # T1.111
-hermes-plugin/tests/test_config.py:524 # T1.111
-hermes-plugin/tests/test_config_edges.py:522 # T1.111
-hermes-plugin/tests/test_config_check_edges.py:445 # T1.111
-
-# T1.112
-tools/mock-llm/mock_llm.py::Handler.do_POST:127 # T1.112
-
 # T1.121
 hermes-plugin/tests/test_config_access_gate.py:424 # T1.121
 

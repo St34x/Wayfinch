@@ -21,6 +21,8 @@ include_external_packages = True
 name = Pure core imports no adapter, framework, Hermes package or stdlib I/O
 type = forbidden
 source_modules =
+    glasses.config_access
+    glasses.config_core
     glasses.hermes_merge
 forbidden_modules =
     # plugin adapters (listed before they exist, so a new adapter is covered when it is created)
@@ -66,6 +68,3 @@ forbidden_modules =
     tempfile
     threading
     time
-ignore_imports =
-    # T1.111 (config.py does file I/O; hermes_merge moves to the pure config module created by the split)
-    glasses.hermes_merge -> glasses.config

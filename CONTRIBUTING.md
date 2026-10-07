@@ -64,9 +64,20 @@ The subject line starts with a task id or a lower-case prefix, then `: ` and the
   with an optional letter, e.g. `T1.06: reject lone surrogates in the codec`;
 - otherwise one of `fix:`, `feat:`, `docs:`, `test:`, `refactor:` or `chore:`.
 
-`tools/quality/check_hygiene.py --commits <range>` checks a range of commits locally. Besides the forms above it
-accepts exactly these prefixes, reserved for the maintainers' own workflow: `merge:`, `design:`, `plan:`, `tasks:`,
-`adr:`, `research:`, `spike:`, `mockups:`, `qa:`, `review:`, `status:` and `night:`. Please use only the ones above.
+`tools/quality/check_hygiene.py --commits <range>` checks a range of commits locally. It applies one allowlist
+(`SUBJECT_PREFIXES` in that script) to every commit, whoever wrote it. Besides the forms above it accepts these
+prefixes, which the project history uses for planning and process commits (most of them change the maintainers'
+unpublished notes):
+
+- `merge:` a merge commit that brings a task branch into `main`;
+- `design:` and `adr:` design documents and decision records;
+- `plan:`, `tasks:` and `status:` plans, task lists and status notes;
+- `night:` logs of scheduled unattended work runs;
+- `research:` and `spike:` research notes and throwaway feasibility experiments;
+- `mockups:` UI mockups;
+- `qa:` and `review:` test reports and code reviews.
+
+A contribution normally needs only a task id or one of `fix:`, `feat:`, `docs:`, `test:`, `refactor:` and `chore:`.
 
 ## Licence and sign-off
 

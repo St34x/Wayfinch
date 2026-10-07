@@ -28,10 +28,11 @@ Importing this module never imports Hermes: Hermes modules are used only when
 from __future__ import annotations
 
 import logging
+import os
 import sys
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
-from types import SimpleNamespace
 
 from .config import environ_reader, gate_violations
 
@@ -41,8 +42,21 @@ HERMES_MARKER_MODULE = "gateway.platforms._shared"
 
 Reader = Callable[[str], str]
 
+# What an unreadable profile scope or a drifted Hermes API raises: file and parse errors, a missing key, a missing or
+# renamed Hermes module/name, a changed signature. violations() turns these into a violation (fail closed).
+SCOPE_ERRORS = (OSError, ValueError, LookupError, ImportError, AttributeError, TypeError, RuntimeError)
 
-def _hermes_api() -> SimpleNamespace | None:
+
+@dataclass(frozen=True)
+class HermesGateApi:
+    """Hermes' own gate readers, as the plugin calls them."""
+
+    platform_gate_env: Callable[[str, str], str]
+    build_profile_secret_scope: Callable[[Path], Mapping[str, object]]
+    installed_profiles: Callable[[], Iterable[tuple[str, str | os.PathLike[str]]]]
+
+
+def _hermes_api() -> HermesGateApi | None:
     """Hermes' own gate readers, or None outside a process that has already loaded Hermes."""
     shared = sys.modules.get(HERMES_MARKER_MODULE)
     if shared is None:
@@ -50,14 +64,14 @@ def _hermes_api() -> SimpleNamespace | None:
     from agent.secret_scope import build_profile_secret_scope
     from hermes_cli.profiles import profiles_to_serve
 
-    return SimpleNamespace(
+    return HermesGateApi(
         platform_gate_env=shared.platform_gate_env,
         build_profile_secret_scope=build_profile_secret_scope,
         installed_profiles=lambda: profiles_to_serve(True, include_standalone=True, include_parked=True),
     )
 
 
-def _mapping_reader(mapping) -> Reader:
+def _mapping_reader(mapping: Mapping[str, object]) -> Reader:
     # Same normalisation as platform_gate_env: missing -> "", value str()-ed and stripped.
     return lambda name: "" if mapping.get(name) is None else str(mapping.get(name)).strip()
 
@@ -77,13 +91,15 @@ def sources() -> list[tuple[str, Reader]]:
 
 
 def violations() -> list[str]:
-    """Every gate violation as ``"<scope>: <problem>"``; ``[]`` = the platform may run. Never raises:
-    an unreadable scope is itself a violation (fail closed)."""
+    """Every gate violation as ``"<scope>: <problem>"``; ``[]`` = the platform may run. An unreadable
+    scope (any of ``SCOPE_ERRORS``) is itself a violation (fail closed). Any other exception is a bug
+    and propagates; every caller refuses on it too (``validate_config``, the adapter's ``gate_ok``,
+    the ``config check`` CLI)."""
     problems: list[str] = []
     try:
         for label, read in sources():
             problems.extend(f"{label}: {problem}" for problem in gate_violations(read))
-    except Exception as exc:
+    except SCOPE_ERRORS as exc:
         problems.append(
             f"profile scopes unreadable ({type(exc).__name__}); refusing to run without checking the allow-all gate"
         )

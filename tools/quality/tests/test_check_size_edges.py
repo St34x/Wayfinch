@@ -12,6 +12,7 @@ from types import ModuleType
 import pytest
 
 QUALITY = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(QUALITY))  # check_size.py imports size_sh.py from its own directory
 TOP = QUALITY.parents[1]
 GIT = shutil.which("git") or "git"
 

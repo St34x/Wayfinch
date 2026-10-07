@@ -19,7 +19,7 @@ Keep `target-version = "py311"` in `ruff.toml` and `python_version = 3.11` in `m
 Then `make lint-py` reports newer syntax as `invalid-syntax: ... on Python 3.11 (syntax was added in Python 3.14)`,
 `ruff format` keeps the parentheses, and `make typecheck-py` rejects stdlib APIs added after 3.11
 (`Module has no attribute "batched"`), except in modules under a mypy ratchet block in `mypy.ini`
-(`ignore_errors = True`; follow-ups T1.111, T1.112, T1.113, T1.55) until their task removes the block;
+(`ignore_errors = True`; `mypy.ini` lists the current blocks) until the owning task removes its block;
 `tools/quality/tests/test_ruff_python_floor.py` (run by `make lint-py`) syntax-checks every tracked `*.py` for 3.11,
 generated code and ratchet-block modules included. Restore the parentheses by hand: `ruff check
 --fix` does not rewrite them.

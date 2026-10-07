@@ -46,18 +46,6 @@ known-local-folder = ["conftest", "test_*"]
 # must still fire in its file; the task that fixes a file deletes its own entries. New code never gets an entry.
 # BEGIN ratchet baseline
 
-# T1.111
-"hermes-plugin/glasses/config.py" = ["BLE001", "S101"]  # T1.111
-"hermes-plugin/tests/test_config.py" = ["ERA001"]  # T1.111
-"hermes-plugin/tests/test_config_check_live.py" = ["B905"]  # T1.111
-"hermes-plugin/tests/test_config_edges.py" = ["B017", "UP031"]  # T1.111
-
-# T1.112
-"tools/mock-llm/mock_llm.py" = ["C901", "T201", "UP031"]  # T1.112
-
-# T1.113
-"hermes-plugin/glasses/gate.py" = ["BLE001"]  # T1.113
-
 # T1.130
 "hermes-plugin/tests/test_registry_corrupt_store.py" = ["BLE001"]  # T1.130
 

@@ -96,19 +96,29 @@ an external signature (a fake of a framework API) may exceed the parameter limit
   `hermes-plugin/glasses/i18n/<locale>.json`. Code refers to message ids, never to literal user-visible text (Android
   lint `HardcodedText` as error; catalog parity tests).
 - **Terms**: one concept = one name, defined in `docs/glossary.md`.
+- **Names** _(gate, planned: `check-private`)_: no other company's or product's name in our identifiers, paths,
+  package, module and class names or configuration keys. Third-party names appear only where law or a licence
+  requires them — copyright and licence headers kept verbatim in vendored files, `NOTICE`, `THIRD_PARTY_NOTICES.md`,
+  the `UPSTREAM.md` provenance file of vendored code — and in prose that describes compatibility ("works with
+  Even Realities G2 glasses"). Vendored code lives under `android/third_party/<name>/` with a neutral folder name and
+  is moved into our own package namespace; its `UPSTREAM.md` records the upstream → our package mapping, so upstream
+  changes can still be compared and ported.
 
 ## 5. Types and static analysis _(gate)_
 
 - **Python**: `mypy --strict` over the plugin package `hermes-plugin/glasses/` and over `tools/` (tool tests
   included), with a **ratchet**: a module listed in a baseline block of `mypy.ini` (`ignore_errors = True`, one block
-  per follow-up task) is exempt until that task types it and deletes the block. Today these are four plugin modules
-  (the package `__init__`, `adapter`, `config`, `gate`) and two test-only tools (the mock LLM and the minimal test
-  platform); `mypy.ini` is the current list, and new modules never get a block. Hermes packages are not installed in
-  the dev venv, so every Hermes import is untyped (`Any`, `ignore_missing_imports` in `mypy.ini`); in the plugin, only
-  `adapter.py`, `gate.py` and `hermes_facts.py` import Hermes. The plugin tests (`hermes-plugin/tests/`)
-  are not type-checked yet: they will be covered by a **test profile** — strict, except that test functions may omit
-  annotations (fixtures stay fully typed) — ratcheted per file once that follow-up lands. `ruff check` +
-  `ruff format --check` cover all Python code.
+  per follow-up task) is exempt until that task types it and deletes the block. Today this is one test-only tool (the
+  minimal test platform, `tools/test-hermes/glasses_min`); `mypy.ini` is the current list, and new modules never get
+  a block. Hermes packages are not installed in the dev venv, so every Hermes import is untyped (`Any`,
+  `ignore_missing_imports` in `mypy.ini`); in the plugin, only `adapter.py`, `gate.py` and `hermes_facts.py` import
+  Hermes. Small `typing.Protocol`s or typed records type the Hermes objects of the plugin's entry points
+  (`register`'s plugin context, the adapter's platform config and inbound event, the gate's Hermes readers). Values
+  whose shape the plugin checks itself at run time still come in as `Any` or `object`: the platform config in the
+  `validate_config` and `is_connected` hooks, and Hermes' config and tool sets in `hermes_facts.py`
+  (`config check --live`). The plugin tests (`hermes-plugin/tests/`) are not type-checked yet: they will be covered
+  by a **test profile** — strict, except that test functions may omit annotations (fixtures stay fully typed) —
+  ratcheted per file once that follow-up lands. `ruff check` + `ruff format --check` cover all Python code.
 - **Kotlin** _(planned, with the Android app)_: **detekt** + **ktlint**; **explicit API mode** in every library
   module; **no `!!`** (detekt `UnsafeCallOnNullableType`); UI and link state as **sealed types**; `val` and
   read-only collections by default — mutable state is private to one class and never exposed.
@@ -231,7 +241,7 @@ violation fails, and the task that fixes a file deletes its own block. New code 
 | Dependency ledger lists exactly the direct dependencies (section 8) | `check-ledger` | planned |
 | CLI reference is fresh (section 9) | `check-codegen` | planned |
 | Commands in docs exist; marked doc tests run (section 9) | `test-docs` | planned |
-| No private deployment identifiers in the tree | `check-private` | planned |
+| No private deployment identifiers in the tree; no third-party names in identifiers and paths (section 4) | `check-private` | planned |
 | Make fragments follow `mk/README.md` | `check-mk-fragments` | planned |
 | Licences on the allowlist; generated third-party notices | `licence-check` | planned |
 | Kotlin: detekt, ktlint, module boundaries, ArchUnit, Kover, generated Kotlin types | `test-android` | planned |

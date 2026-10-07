@@ -22,11 +22,13 @@ Tree mode (default, part of `make test` via mk/hygiene.mk):
       public document that carries the reasoning (ENGINEERING.md, docs/, protocol/README.md) or state the
       behaviour inline. Whole file text and every tracked path name are matched, not only comments; a file
       name with a `_qa`/`-qa<n>` suffix before its extension is a finding too (`_PROCESS_NAME`).
-Commit mode (`--commits [RANGE]`, run by CI):
+Commit mode (`--commits [RANGE]`, run at merge time; CI planned):
   (b) every commit subject in the range starts with `<task id>: ` or a lowercase area prefix (`SUBJECT_PREFIXES`)
       followed by text. Without RANGE the range is `<gate start>..HEAD`: the gate start is the commit hash in
       `GATE_START_FILE` (the merge commit of T1.102 on main, written there by the merge step in a follow-up commit;
-      older commits are exempt history). CI runs `check_hygiene.py --commits`. An explicit RANGE is checked as given.
+      older commits are exempt history). No CI is set up yet: the merge step runs `check_hygiene.py --commits`
+      (the command is in `mk/hygiene.mk`); CI will run it once CI exists (planned). An explicit RANGE is checked as
+      given.
 
 Usage: check_hygiene.py [--commits [RANGE]]   (from anywhere inside the repository)
 Exit:  0 clean, 1 findings (on stderr), 2 usage or git error (fails closed: no repository, unreadable index,

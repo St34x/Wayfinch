@@ -4,9 +4,8 @@
 
 Files: tracked files outside .team/ named *.py *.kt *.kts *.sh *.mk *.gradle or Makefile, and Markdown under docs/.
   Hard limit 400 lines (error), target 300 (warning).
-Functions: Python (ast, def/async def incl. methods, key "path::Class.name") and POSIX sh ("name()" then "{"/"("
-  on the same or a later line, ended by "}"/")" at the start of a line with the brace line's indentation; here-doc
-  bodies skipped, "<<" in comment lines ignored; one-line functions not measured). Hard limit 60, target 40.
+Functions: Python (ast, def/async def incl. methods, key "path::Class.name") and POSIX sh (key "path::name", rules in
+  size_sh.py). Hard limit 60, target 40.
 Exempt: paths matching a glob in the exempt file ("*" "?" stay in one path segment, "**" spans segments, a glob
   without "/" matches the name anywhere), and files whose leading comment header (blank/comment lines within the
   first 10) holds a marker line: comment token ("#" "//" "/*" "*" "<!--") then the word @generated. Other mentions
@@ -28,6 +27,8 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from size_sh import sh_functions
+
 FILE_HARD, FILE_TARGET = 400, 300
 FUNC_HARD, FUNC_TARGET = 60, 40
 SOURCE_SUFFIXES = (".py", ".kt", ".kts", ".sh", ".mk", ".gradle")
@@ -36,9 +37,6 @@ HEAD_LINES = 10
 TASK_ID = r"T\d+\.\d+[a-z]?"
 BASELINE_LINE = re.compile(rf"(?P<key>\S+):(?P<limit>\d+)\s+#\s*(?P<task>{TASK_ID})(?:\s.*)?")
 BLOCK_HEADER = re.compile(rf"#\s*(?P<task>{TASK_ID})\b.*")
-SH_START = re.compile(r"(?P<indent>[ \t]*)(?P<name>[A-Za-z_]\w*)[ \t]*\(\s*\)[ \t]*(?:(?P<open>[{(])[ \t]*)?(?:#.*)?")
-SH_OPEN = re.compile(r"(?P<indent>[ \t]*)(?P<open>[{(])[ \t]*(?:#.*)?")
-HEREDOC = re.compile(r"(?<!<)<<(?P<dash>-?)[ \t]*(?P<q>['\"]?)\\?(?P<word>[A-Za-z_]\w*)(?P=q)")
 GENERATED = re.compile(r"\s*(?:#|//|/\*+|\*|<!--)\s*@generated(?:\s.*)?")
 HEADER_LINE = re.compile(r"\s*(?:#|//|/\*|\*|<!--|$)")
 
@@ -136,46 +134,6 @@ def python_functions(text: str) -> list[tuple[str, int]]:
 
     visit(ast.parse(text), "")
     return found
-
-
-def sh_code_lines(lines: list[str]) -> list[tuple[int, str]]:
-    """Return (index, line) of the lines outside here-document bodies."""
-    code: list[tuple[int, str]] = []
-    pending: list[tuple[str, bool]] = []
-    for index, line in enumerate(lines):
-        if pending:
-            word, dash = pending[0]
-            if (line.lstrip("\t") if dash else line) == word:
-                pending.pop(0)
-            continue
-        code.append((index, line))
-        if not line.lstrip().startswith("#"):
-            pending = [(m["word"], m["dash"] == "-") for m in HEREDOC.finditer(line)]
-    if pending:
-        raise ValueError(f"unterminated here-document {pending[0][0]}")
-    return code
-
-
-def sh_functions(text: str) -> list[tuple[str, int]]:
-    code = sh_code_lines(text.splitlines())
-    found: list[tuple[str, int]] = []
-    for pos, (start, line) in enumerate(code):
-        header = SH_START.fullmatch(line)
-        opener = (header if header["open"] else _next_open(code[pos + 1 :])) if header else None
-        if header is None or opener is None:
-            continue
-        close = opener["indent"] + ("}" if opener["open"] == "{" else ")")
-        end = next((i for i, rest in code[pos + 1 :] if rest.startswith(close)), None)
-        if end is None:
-            raise ValueError(f"cannot find the end of sh function {header['name']} (line {start + 1})")
-        found.append((header["name"], end - start + 1))
-    return found
-
-
-def _next_open(rest: list[tuple[int, str]]) -> re.Match[str] | None:
-    """The "{" or "(" line after a bare "name()" header (blank and comment lines may come between)."""
-    line = next((text for _, text in rest if text.strip() and not text.lstrip().startswith("#")), "")
-    return SH_OPEN.fullmatch(line)
 
 
 def measure(path: str, text: str) -> list[Item]:

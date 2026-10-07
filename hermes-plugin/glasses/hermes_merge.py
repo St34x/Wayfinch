@@ -25,7 +25,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from .config import PLATFORM_NAME
+from .config_core import PLATFORM_NAME
 
 # PlatformConfig._TYPED_KEYS at the pin (gateway/config.py:440-443); every other block key goes to extra.
 HERMES_TYPED_KEYS = frozenset({

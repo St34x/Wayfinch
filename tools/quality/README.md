@@ -11,7 +11,7 @@ script with its `mk/*.mk` fragment and tests.
 
 | Script | Make target | Data files |
 |---|---|---|
-| `check_size.py` | `check-size` | `size-exempt.txt`, `size-baseline.txt` |
+| `check_size.py` (sh function rules: `size_sh.py`) | `check-size` | `size-exempt.txt`, `size-baseline.txt` |
 | `check_hygiene.py` (`--commits`: at merge time) | `check-hygiene` | `commit-gate-start.txt` |
 | `check_readmes.py` | `check-hygiene` | `modules.txt` |
 | `check_mypy_config.py` | `typecheck-py` | `mypy.ini` (root) |
