@@ -48,6 +48,7 @@ flowchart LR
    acknowledged outbox while the phone is offline.
 
 Details: [docs/architecture.md](docs/architecture.md). Wire format: [protocol/README.md](protocol/README.md).
+Every document: [docs/README.md](docs/README.md).
 
 ## Status
 
@@ -62,14 +63,14 @@ hand):
 | Plugin config | JSON Schema for the plugin config with precise error messages and a generated [configuration reference](docs/reference/config.md); `config check` CLI (static checks, plus `--live` checks against a Hermes install) | `config.schema.json`, `config*.py`, `admin.py` |
 | Device registry | Token stored only as SHA-256, constant-time verification, revocation with tombstones, atomic `0600` writes, fails closed on a corrupt or foreign-owned file | `registry.py` |
 | Test harness | Scripts for an isolated test instance of a pinned Hermes Agent with a minimal test platform and a mock LLM on loopback ports, never touching a real install ([setup](docs/test-hermes.md)); `make test` checks the scripts against a fake `hermes` | [`tools/test-hermes/`](tools/test-hermes/), [`tools/mock-llm/`](tools/mock-llm/) |
-| Quality gates | Secret scan, SPDX headers, size limits, repo hygiene (task ids on `TODO`s, unique glossary terms, no private references), module READMEs, ruff, mypy `--strict` (with a ratchet for modules not typed yet), the Python 3.11 floor, import boundaries, codegen freshness (protocol types and the configuration reference), plugin coverage (core files ≥90 %, other files ≥70 %), hash-pinned installs | [`mk/`](mk/), [`tools/quality/`](tools/quality/) |
+| Quality gates | Secret scan, SPDX headers, size limits, repo hygiene (task ids on `TODO`s, unique glossary terms, no private references), module READMEs, ruff, mypy `--strict` (with a ratchet for modules not typed yet), the Python 3.11 floor, import boundaries, codegen freshness (protocol types and the configuration reference), plugin coverage (core files ≥90 %, other files ≥70 %), hash-pinned installs; docs gates: internal links and anchors resolve and every public document is indexed, a generated [make-target reference](docs/reference/make-targets.md) that must match `mk/*.mk` and the gate table, and a dependency ledger that must list exactly the direct dependencies at their pins | [`mk/`](mk/), [`tools/quality/`](tools/quality/) |
 
 **Planned** (designed, not built): the envelope codec and the WebSocket server with device authentication; the outbox;
 approval and clarify cards; the voice path; the admin CLI for the device CA, enrolment and revocation; the long-answer
 router; reverse-proxy examples; and the whole **Android app**: the G2 Bluetooth driver, the HUD, the companion screen,
 enrolment, phone skills and the phone bridge. Meeting mode comes later still. Also still to come: CI, the Kotlin
-gates, the licence check and the docs gates (links, make-target and CLI references, dependency ledger, doc tests; see
-[ENGINEERING.md §10](ENGINEERING.md#10-gates)). The `android/` directory is an empty placeholder today. The HUD and
+gates, the licence check, the CLI reference and doc tests (see [ENGINEERING.md §10](ENGINEERING.md#10-gates)). The
+`android/` directory is an empty placeholder today. The HUD and
 the companion screen are designed and mocked up at the real display resolution, but none of that is code yet.
 
 Known limits of the first release, by design: G2 glasses only; Android 17 (API level 37) only; a Hermes gateway and a
@@ -121,7 +122,12 @@ written down:
 - **Ports and adapters:** the pure core imports no adapter, framework, Hermes package or I/O module. This is checked
   transitively with import-linter and by an AST purity check that bans builtin I/O and clock reads.
 - **Single source of truth:** protocol types and the [configuration reference](docs/reference/config.md) are generated
-  from their schemas. A stale generated file fails the build.
+  from their schemas, the [make-target reference](docs/reference/make-targets.md) from the `#:` lines of the
+  `Makefile` and `mk/*.mk`. A stale generated file fails the build.
+- **Docs as code:** internal links and anchors must resolve and every public document must be reachable by links from
+  this README (the [docs index](docs/README.md) lists them); every `make <target>` a document runs must be a defined
+  target or one marked planned in the gate table; the [dependency ledger](docs/dependencies.md) must list exactly the
+  direct dependencies at their pinned versions.
 - **Hygiene:** every `TODO` carries a task id, the glossary defines each term once, every source file has an SPDX
   header, every module directory has a short README (Purpose, Public API, Invariants), and no file or file name cites
   the private team notes (team-folder paths, decision-record numbers, report names) or carries a review-process tag
@@ -150,8 +156,8 @@ tools/*.sh              secret scan (pinned gitleaks) and SPDX check
 tools/tests/            shell tests of those scripts, the make wiring and the hash-pinned venv install
 mk/                     make fragments; each component wires in its own test target
 deploy/examples/        example plugin configuration (example.com values)
-docs/                   architecture, dependency ledger, glossary, configuration reference, test-instance setup,
-                        troubleshooting
+docs/                   architecture, dependency ledger, glossary, configuration and make-target references,
+                        test-instance setup, troubleshooting
 ENGINEERING.md          engineering standards
 ```
 
@@ -159,7 +165,8 @@ ENGINEERING.md          engineering standards
 
 Requirements: git, a POSIX shell, GNU make, **Python 3.14** (every pin has a CPython 3.14 wheel for
 Linux x86_64/aarch64 and macOS arm64), and network access the first time (the pinned gitleaks release is downloaded,
-checksum-verified and cached under `.local/`). Python 3.14 is the dev and test toolchain only: the plugin itself
+checksum-verified and cached under `.local/`; `make test` also keeps pytest's temp files in `.local/pytest-tmp/`).
+Python 3.14 is the dev and test toolchain only: the plugin itself
 targets Python 3.11–3.14, the range Hermes declares in `requires-python`, and the gates check that all Python code
 stays 3.11-compatible.
 

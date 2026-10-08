@@ -6,5 +6,6 @@ PY ?= .local/venv-dev/bin/python
 .PHONY: test-protocol
 TEST_TARGETS += test-protocol
 
+#: test-protocol — protocol schema and fixture tests
 test-protocol:
-	$(PY) -m pytest protocol/tests -q -p no:cacheprovider
+	mkdir -p .local/pytest-tmp && $(PY) -m pytest --basetemp=.local/pytest-tmp/test-protocol protocol/tests -q -p no:cacheprovider

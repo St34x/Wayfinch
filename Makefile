@@ -15,17 +15,21 @@ TEST_TARGETS :=
 .DEFAULT_GOAL := help
 .PHONY: help test secret-scan venv
 
+#: help — list the top-level targets and the `TEST_TARGETS` that `make test` runs
 help:
 	@echo "make test         secret scan + fragment test targets:$(if $(strip $(TEST_TARGETS)), $(strip $(TEST_TARGETS)), (none))"
 	@echo "make secret-scan  gitleaks (pinned + checksum-verified) over working tree and history"
 	@echo "make venv         build $(VENV) from requirements-dev.txt with $(PYTHON)"
 
+#: test — the secret scan plus every target a fragment appends to `TEST_TARGETS`
 test: secret-scan $(TEST_TARGETS)
 	@echo "make test: OK (secret-scan$(if $(strip $(TEST_TARGETS)), $(strip $(TEST_TARGETS))))"
 
+#: secret-scan — pinned, checksum-verified gitleaks over the working tree and the history of HEAD
 secret-scan:
 	sh tools/secret-scan.sh
 
+#: venv — (re)build the Python test venv (VENV, default .local/venv-dev) from the hash-pinned requirements-dev.txt
 venv:
 	$(PYTHON) -m venv $(VENV)
 	$(VENV)/bin/python -m pip install --disable-pip-version-check --require-hashes --only-binary :all: \

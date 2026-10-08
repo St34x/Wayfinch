@@ -42,7 +42,8 @@ cd ..
 ```sh
 make test-hermes-up      # test home + mock LLM (background) + gateway (foreground); Ctrl-C stops the gateway
 make test-hermes-down    # from a second shell: stops the gateway and the mock LLM via their pid files
-.local/venv-dev/bin/python -m pytest hermes-plugin/tests/test_config_check_live.py -q -rs
+mkdir -p .local/pytest-tmp && .local/venv-dev/bin/python -m pytest --basetemp=.local/pytest-tmp/manual \
+    hermes-plugin/tests/test_config_check_live.py -q -rs
 ```
 
 `test-hermes-up` builds the test home `.local/hh` (a default profile and the test profiles `alpha` and `beta`, each

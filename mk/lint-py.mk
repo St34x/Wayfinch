@@ -12,8 +12,9 @@ LINT_PY_TESTS := $(sort $(wildcard tools/quality/tests/test_ruff_*.py))
 .PHONY: lint-py
 TEST_TARGETS += lint-py
 
+#: lint-py — ruff lint and format check (ruff.toml with its ratchet baseline) over hermes-plugin, protocol and tools
 lint-py:
 	$(PY) -m ruff check --no-cache --config ruff.toml $(LINT_PY_DIRS)
 	$(PY) -m ruff format --no-cache --config ruff.toml --check $(LINT_PY_DIRS)
 	@test -n "$(LINT_PY_TESTS)" || { echo "lint-py: no tools/quality/tests/test_ruff_*.py found" >&2; exit 1; }
-	$(PY) -m pytest $(LINT_PY_TESTS) -q -p no:cacheprovider
+	mkdir -p .local/pytest-tmp && $(PY) -m pytest --basetemp=.local/pytest-tmp/lint-py $(LINT_PY_TESTS) -q -p no:cacheprovider

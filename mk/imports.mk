@@ -11,8 +11,9 @@ IMPORTS_TESTS = $(sort $(wildcard tools/quality/tests/test_imports*.py))
 .PHONY: check-imports
 TEST_TARGETS += check-imports
 
+#: check-imports — dependencies point inward: the pure plugin core imports no adapter, framework or I/O
 check-imports:
 	@test -n "$(IMPORTS_TESTS)" || { echo "check-imports: no tools/quality/tests/test_imports*.py found" >&2; exit 1; }
-	$(PY) -m pytest $(IMPORTS_TESTS) -q -p no:cacheprovider
+	mkdir -p .local/pytest-tmp && $(PY) -m pytest --basetemp=.local/pytest-tmp/check-imports $(IMPORTS_TESTS) -q -p no:cacheprovider
 	cd hermes-plugin && $(dir $(abspath $(PY)))lint-imports --config ../.importlinter --no-cache --no-logo
 	$(PY) tools/quality/check_core_purity.py

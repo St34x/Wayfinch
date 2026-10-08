@@ -10,8 +10,9 @@ Scripts that build, check and test the repository. Nothing here is installed or 
 
 - `secret-scan.sh` — pinned, checksum-verified gitleaks over the tree and history (`make secret-scan`).
 - `check-spdx.sh` — every tracked source file carries the SPDX header (`make check-spdx`).
-- `quality/` — the quality gates (size, hygiene, module READMEs, lint, types, imports, coverage); own README.
-- `codegen/` — generators: protocol types and the config reference; own README.
+- `quality/` — the quality gates (size, hygiene, module READMEs, lint, types, imports, coverage, docs links and index,
+  dependency ledger); own README.
+- `codegen/` — generators: protocol types, the config reference and the make-target reference; own README.
 - `mock-llm/` — scripted OpenAI-compatible mock LLM for the test Hermes; own README.
 - `test-hermes/` — isolated test Hermes: `setup_home.sh`, `run_gateway.sh`, `stop_pidfile.sh`, a minimal plugin
   `glasses_min/` and the hermetic `test_harness.sh` (`make test-hermes-up` / `-down` / `-harness`, see

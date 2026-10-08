@@ -139,6 +139,9 @@ an external signature (a fake of a framework API) may exceed the parameter limit
   compared with a committed golden file; an intended change updates the golden in the same commit.
 - **Fakes over mocks**: `FakeGlasses`, fake GATT, fake clock, mock LLM, fake device. Interaction mocks only where no
   behaviour can be observed.
+- **Temp dirs** _(gate)_: every pytest call in `Makefile` and `mk/*.mk` passes its own
+  `--basetemp=.local/pytest-tmp/<dir>` (one plain dir per call), so `tmp_path` data stays in the gitignored `.local/`
+  and no two calls share or empty each other's base dir (`mk/README.md`).
 
 ## 7. Errors and logs
 
@@ -175,7 +178,9 @@ an external signature (a fake of a framework API) may exceed the parameter limit
 - **Licence check** _(gate, planned)_: an allowlist with reasoned exceptions only (`docs/dependencies.md`); reviewed
   by hand until the gate lands.
 - **Each new direct dependency is justified** by one line in `docs/dependencies.md` (name, version, licence, why,
-  alternative rejected) _(gate, planned: the ledger must list every direct dependency)_.
+  alternative rejected) _(gate: `check-ledger`: the declared direct set, the `# direct:` lines of
+  `requirements-dev.txt`, matches the ledger rows and the pins; whether a pin is direct is declared by people and
+  checked in review)_.
 
 ## 9. Documentation (docs as code)
 
@@ -186,9 +191,12 @@ an external signature (a fake of a framework API) may exceed the parameter limit
 - **Generate references, do not copy them.** Where a source of truth exists, the reference is generated from it and
   checked for freshness: configuration from `hermes-plugin/glasses/config.schema.json` (`docs/reference/config.md`),
   protocol types from `protocol/envelope.schema.json`, make targets from `mk/*.mk`, CLI subcommands from the CLI
-  parser. Hand-written docs link to the reference instead of repeating its values.
-- **Docs are tested** _(gate, planned; section 10)_: internal links and anchors resolve, every document is reachable
-  from an index, every make target, script and path a document names exists, and commands marked as doc tests run.
+  parser (planned). Hand-written docs link to the reference instead of repeating its values.
+- **Docs are tested** _(section 10)_: internal links and anchors resolve and every public document is reachable by
+  links from `README.md`, with `docs/README.md` as the index _(gate: `check-docs`)_; the make-target reference is
+  fresh and every `make <target>` a public document runs in a code span or fenced block is a defined target or in a
+  planned row of section 10 _(gate: `check-make-docs`)_; every script and path a document names exists and commands
+  marked as doc tests run _(gate, planned: `test-docs`)_.
 - **Self-contained public tree**: the team's working notes stay outside the published repository, so no file may
   point at them: no path into the team folder, no decision-record number, no QA or review report name and no
   review-process tag. Matching is case-insensitive and covers the whole text of every tracked text file outside the
@@ -233,12 +241,14 @@ violation fails, and the task that fixes a file deletes its own block. New code 
 | `TODO` with a task id, glossary terms unique, no private references (sections 3, 9) | `check-hygiene` | live |
 | Commit subjects (section 3) | `check_hygiene.py --commits` | live at merge time; CI planned |
 | Module READMEs: Purpose / Public API / Invariants, ≤40 lines (section 1) | `check-hygiene` | live |
+| pytest temp dirs: one `--basetemp` under `.local/pytest-tmp/` per call (section 6) | `check-hygiene` | live |
 | Configuration reference is fresh (sections 4, 9) | `check-codegen` | live |
 | Coverage: plugin core files ≥90 %, other plugin files ≥70 %, exact ratchet entries below that (section 6) | `coverage-py` | live |
+| Component test suites: plugin, protocol, mock LLM, test-Hermes harness, secret-scan wrapper, make wiring, hash-pinned venv install (section 6) | `test-plugin`, `test-protocol`, `test-mock-llm`, `test-hermes-harness`, `test-secret-scan`, `test-make-wiring`, `test-venv-hashes` | live |
 | Python code parses (every tracked `*.py`) and type-checks for the oldest Python that Hermes declares in `requires-python`, except modules under a mypy ratchet block (section 8) | `lint-py`, `typecheck-py` | live |
-| Docs: internal links and anchors resolve, every document is indexed (section 9) | `check-docs` | planned |
-| Docs: make-target reference and this table match `mk/*.mk` (section 9) | `check-make-docs` | planned |
-| Dependency ledger lists exactly the direct dependencies (section 8) | `check-ledger` | planned |
+| Docs: internal links and anchors resolve, every document is indexed (section 9) | `check-docs` | live |
+| Docs: make-target reference and this table match `mk/*.mk` (section 9) | `check-make-docs` | live |
+| Dependency ledger lists exactly the declared direct dependencies (section 8) | `check-ledger` | live |
 | CLI reference is fresh (section 9) | `check-codegen` | planned |
 | Commands in docs exist; marked doc tests run (section 9) | `test-docs` | planned |
 | No private deployment identifiers in the tree; no third-party names in identifiers and paths (section 4) | `check-private` | planned |

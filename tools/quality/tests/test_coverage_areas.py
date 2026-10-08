@@ -53,11 +53,14 @@ def plant(top: Path, rc_text: str = RC_NO_RATCHET) -> Path:
     }.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
+    # The recipe's `--basetemp=.local/pytest-tmp/<dir>` resolves inside this scratch tree (pytest needs the parent).
+    (top / ".local/pytest-tmp").mkdir(parents=True, exist_ok=True)
     return top
 
 
 def run_tests(top: Path) -> None:
-    argv = [sys.executable, "-m", "pytest", "hermes-plugin/tests", "-q", "-p", "no:cacheprovider", "--cov"]
+    argv = [sys.executable, "-m", "pytest", "--basetemp=.local/pytest-tmp/plugin-tests", "hermes-plugin/tests", "-q"]
+    argv += ["-p", "no:cacheprovider", "--cov"]
     done = subprocess.run([*argv, "--cov-config=.coveragerc", "--cov-report="], cwd=top, capture_output=True, text=True)
     assert done.returncode == 0, done.stdout + done.stderr
 

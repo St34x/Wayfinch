@@ -8,6 +8,7 @@ PYTHON ?= python3
 .PHONY: test-venv-hashes
 TEST_TARGETS += test-venv-hashes
 
+#: test-venv-hashes — offline tamper tests of the hash-pinned `make venv` install
 test-venv-hashes:
 	env -u MAKEFLAGS -u MFLAGS -u MAKELEVEL -u PY -u VENV -u TEST_TARGETS PYTHON=$(PYTHON) \
 		sh tools/tests/test_venv_hashes.sh

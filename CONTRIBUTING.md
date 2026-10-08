@@ -25,7 +25,9 @@ The gates enforce most of it.
 5. Generated files are never edited by hand. After a schema change, regenerate and commit:
    `.local/venv-dev/bin/python tools/codegen/gen_protocol.py` (protocol schema) or
    `.local/venv-dev/bin/python tools/codegen/gen_config_docs.py` (plugin config schema).
-6. A new direct dependency needs a row in [docs/dependencies.md](docs/dependencies.md) and hash pins.
+6. A new direct dependency needs a `# direct: <name> (<scope>)` line and hash pins in `requirements-dev.txt`, a
+   `## Python` row in [docs/dependencies.md](docs/dependencies.md) and the "all N pins" sentence there updated;
+   `make check-ledger` checks it.
 
 Also:
 

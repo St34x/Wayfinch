@@ -3,7 +3,9 @@
 
 The ledger of every **direct** dependency: one row each, with the reason it is here and the alternative that was
 rejected. A change that adds, removes or upgrades a direct dependency updates its row in the same commit
-(ENGINEERING.md §8). Transitive dependencies are not listed here; they are pinned with their SHA-256 digests in
+(ENGINEERING.md §8); a new one also needs a `# direct: <name> (<scope>)` line in `requirements-dev.txt` and the
+"all N pins" sentence below updated (`make check-ledger` checks it). Transitive dependencies are not listed here;
+they are pinned with their SHA-256 digests in
 `requirements-dev.txt` (`make venv` installs them with `pip --require-hashes --only-binary :all:`, recipe:
 [`troubleshooting/pip-require-hashes-missing-hash.md`](troubleshooting/pip-require-hashes-missing-hash.md)).
 `--only-binary` keeps pip from building an sdist (its build backend would be installed without a hash check,
@@ -32,11 +34,11 @@ is imported by the test platform under `tools/test-hermes/`, which runs in the t
 
 | Name | Version | Licence | Scope | Why | Alternative rejected |
 |---|---|---|---|---|---|
-| aiohttp | 3.14.3 | Apache-2.0 AND MIT | runtime | Planned (not imported yet): WebSocket/HTTP server of the glasses platform adapter | `websockets` — not in the Hermes venv, would be a new runtime dependency |
+| aiohttp | 3.14.3 | Apache-2.0 AND MIT | runtime | Planned (not imported yet): WebSocket/HTTP server of the glasses platform adapter | `websockets` — also a Hermes core dependency, but one aiohttp server serves both the WebSocket and the HTTP `/enroll` endpoint |
 | jsonschema | 4.26.0 | MIT | runtime | Validates the plugin config (and, in tests, protocol messages) against the JSON Schema 2020-12 files | `fastjsonschema` — not in the Hermes venv; hand-written validators drift from the schema |
 | PyYAML | 6.0.3 | MIT | runtime | Reads the Hermes `config.yaml` in the operator CLI and in tests | `ruamel.yaml` — round-trip editing is not needed for reading |
 | cryptography | 50.0.1 | Apache-2.0 OR BSD-3-Clause | runtime | Planned (not imported yet): device CA and client certificates (key generation, signing, parsing) | Calling the `openssl` CLI — output parsing and version differences per platform |
-| pytest | 8.4.2 | MIT | dev | Test runner for every Python suite (fixtures, parametrize, `tmp_path`) | stdlib `unittest` — more boilerplate, no parametrized fixtures |
+| pytest | 9.1.1 | MIT | dev | Test runner for every Python suite (fixtures, parametrize, `tmp_path`) | stdlib `unittest` — more boilerplate, no parametrized fixtures |
 | ruff | 0.16.10 | MIT | dev | Lint, format, complexity and size rules in one pinned binary | flake8 + black + isort + mccabe — four tools and four pins for the same rules |
 | mypy | 2.4.0 | MIT | dev | Static types, `--strict` | pyright — needs a Node.js runtime in the dev toolchain |
 | types-PyYAML | 6.0.12.20260906 | Apache-2.0 | dev | Type stubs so `mypy --strict` checks the code that uses PyYAML | `ignore_missing_imports` for `yaml` — every YAML call would be untyped |

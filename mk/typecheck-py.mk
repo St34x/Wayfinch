@@ -10,8 +10,9 @@ TYPECHECK_PY_TESTS := $(sort $(wildcard tools/quality/tests/test_mypy_*.py))
 .PHONY: typecheck-py
 TEST_TARGETS += typecheck-py
 
+#: typecheck-py — mypy --strict over hermes-plugin/glasses and tools (mypy.ini only)
 typecheck-py:
 	@test -n "$(TYPECHECK_PY_TESTS)" || { echo "typecheck-py: no test matches tools/quality/tests/test_mypy_*.py" >&2; exit 1; }
 	$(PY) tools/quality/check_mypy_config.py
-	$(PY) -m pytest $(TYPECHECK_PY_TESTS) -q -p no:cacheprovider
+	mkdir -p .local/pytest-tmp && $(PY) -m pytest --basetemp=.local/pytest-tmp/typecheck-py $(TYPECHECK_PY_TESTS) -q -p no:cacheprovider
 	$(PY) -m mypy --config-file mypy.ini

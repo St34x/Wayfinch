@@ -8,5 +8,6 @@ PY ?= .local/venv-dev/bin/python
 .PHONY: test-mock-llm
 TEST_TARGETS += test-mock-llm
 
+#: test-mock-llm — unit tests of the scripted mock LLM (directives and HTTP glue; no network)
 test-mock-llm:
-	$(PY) -m pytest tools/mock-llm/tests -q -p no:cacheprovider
+	mkdir -p .local/pytest-tmp && $(PY) -m pytest --basetemp=.local/pytest-tmp/test-mock-llm tools/mock-llm/tests -q -p no:cacheprovider

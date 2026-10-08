@@ -1,8 +1,21 @@
 # Python dev toolchain for `make test` and the quality gates (built into .local/venv-dev by `make venv`, which
-# installs with pip --require-hashes). Direct requirements, each justified in docs/dependencies.md:
-#   plugin runtime (the versions of the Hermes venv the plugin runs in): aiohttp, jsonschema, PyYAML, cryptography;
-#   test and quality tools (dev-only): pytest, ruff, mypy, types-PyYAML, import-linter, coverage, pytest-cov,
-#   hypothesis.
+# installs with pip --require-hashes). Direct requirements: one `# direct: <name> (<scope>)` line each, each with its
+# row in docs/dependencies.md (same name, version = pin, same scope; `make check-ledger` checks it). Scopes: runtime =
+# plugin runtime (the versions of the Hermes venv the plugin runs in); dev = test and quality tools (dev-only).
+# A new direct requirement needs its line here, its ## Python row and the "all N pins" sentence of the ledger
+# updated (`make check-ledger` checks it).
+# direct: aiohttp (runtime)
+# direct: jsonschema (runtime)
+# direct: PyYAML (runtime)
+# direct: cryptography (runtime)
+# direct: pytest (dev)
+# direct: ruff (dev)
+# direct: mypy (dev)
+# direct: types-PyYAML (dev)
+# direct: import-linter (dev)
+# direct: coverage (dev)
+# direct: pytest-cov (dev)
+# direct: hypothesis (dev)
 # Every transitive dependency is pinned too (the full `pip freeze` of the venv, Python 3.14), each with the SHA-256
 # of every file PyPI publishes for that version (all wheels + sdist), so any platform installs exactly these bytes
 # or fails. Regenerate after changing a pin: pip freeze of the rebuilt venv, then the digests from
@@ -1342,9 +1355,9 @@ Pygments==2.21.0 \
 pytest-cov==7.1.0 \
     --hash=sha256:30674f2b5f6351aa09702a9c8c364f6a01c27aae0c1366ae8016160d1efc56b2 \
     --hash=sha256:a0461110b7865f9a271aa1b51e516c9a95de9d696734a2f71e3e78f46e1d4678
-pytest==8.4.2 \
-    --hash=sha256:86c0d0b93306b961d58d62a4db4879f27fe25513d4b969df351abdddb3c30e01 \
-    --hash=sha256:872f880de3fc3a5bdc88a11b39c9710c3497a547cfa9320bc3c5e62fbf272e79
+pytest==9.1.1 \
+    --hash=sha256:1088fbde8f2b49d95a549a195707afa7a76a3ce9bcadc26b6d71f0ffda5fe313 \
+    --hash=sha256:37a86b45efb9a47a61a36449063e8e18d0cab3161329fc099eb21783169c4f0c
 PyYAML==6.0.3 \
     --hash=sha256:00c4bdeba853cc34e7dd471f16b4114f4162dc03e6b7afcc2128711f0eca823c \
     --hash=sha256:0150219816b6a1fa26fb4699fb7daa9caf09eb1999f3b70fb6e786805e80375a \

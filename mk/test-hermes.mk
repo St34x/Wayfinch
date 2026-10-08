@@ -22,15 +22,18 @@ export TEST_HERMES_LOCAL TEST_LLM_PORT TEST_GATEWAY_PORT
 .PHONY: test-hermes-harness test-hermes-up test-hermes-down
 TEST_TARGETS += test-hermes-harness
 
+#: test-hermes-harness — hermetic tests of the test-Hermes harness (fake hermes, temp dirs, no ports, no network)
 test-hermes-harness:
 	PY=$(PY) sh tools/test-hermes/test_harness.sh
 
+#: test-hermes-up — start the isolated test Hermes: test home, mock LLM in the background, gateway in the foreground
 test-hermes-up:
 	mkdir -p $(TEST_HERMES_LOCAL)
 	sh tools/test-hermes/setup_home.sh
 	env -i PATH=/usr/bin:/bin /usr/bin/python3 tools/mock-llm/mock_llm.py --port $(TEST_LLM_PORT) --log-file $(TEST_HERMES_LOCAL)/mock-llm.jsonl & echo $$! > $(TEST_HERMES_LOCAL)/mock-llm.pid
 	sh tools/test-hermes/run_gateway.sh
 
+#: test-hermes-down — stop the test gateway and the mock LLM via their pid files
 test-hermes-down:
 	sh tools/test-hermes/stop_pidfile.sh $(TEST_HERMES_LOCAL)/gateway.pid 'hermes gateway run'
 	sh tools/test-hermes/stop_pidfile.sh $(TEST_HERMES_LOCAL)/mock-llm.pid 'mock_llm.py --port $(TEST_LLM_PORT)'

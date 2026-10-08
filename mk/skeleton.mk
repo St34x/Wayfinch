@@ -9,11 +9,13 @@
 .PHONY: test-secret-scan test-make-wiring
 TEST_TARGETS += test-secret-scan test-make-wiring
 
+#: test-secret-scan — self-tests of the secret-scan wrapper
 test-secret-scan:
 	sh tools/secret-scan.sh --version >/dev/null
 	sh tools/tests/test_secret_scan.sh
 	sh tools/tests/test_secret_scan_edges.sh
 
+#: test-make-wiring — edge cases of the `mk/*.mk` fragment wiring on throwaway Makefile copies
 test-make-wiring:
 	env -u MAKEFLAGS -u MFLAGS -u MAKELEVEL -u PY -u PYTHON -u VENV -u TEST_TARGETS \
 		sh tools/tests/test_make_fragments_edges.sh

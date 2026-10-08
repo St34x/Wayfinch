@@ -7,6 +7,7 @@ PY ?= .local/venv-dev/bin/python
 .PHONY: check-size
 TEST_TARGETS += check-size
 
+#: check-size — file and function length limits (tools/quality/check_size.py with its baseline)
 check-size:
-	$(PY) -m pytest tools/quality/tests/test_check_size*.py -q -p no:cacheprovider
+	mkdir -p .local/pytest-tmp && $(PY) -m pytest --basetemp=.local/pytest-tmp/check-size tools/quality/tests/test_check_size*.py -q -p no:cacheprovider
 	$(PY) tools/quality/check_size.py

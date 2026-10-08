@@ -34,3 +34,4 @@ commit.
 - multiple exception types must be parenthesized, except A, B, Python 3.11, py314, ruff format → [`python-311-except-tuple-ruff-format.md`](python-311-except-tuple-ruff-format.md)
 - No module named 'ruamel', test Hermes venv, Python older than 3.14, pip installs almost nothing → [`test-hermes-venv-no-module-ruamel.md`](test-hermes-venv-no-module-ruamel.md)
 - the Python module 'PyYAML' is not installed, config check --live exit 2, test_config_check_live fails → [`test-hermes-venv-pyyaml-missing.md`](test-hermes-venv-pyyaml-missing.md)
+- FileNotFoundError No such file or directory .local/pytest-tmp, --basetemp, tmp_path setup error, fresh clone → [`pytest-basetemp-creates-no-parents.md`](pytest-basetemp-creates-no-parents.md)

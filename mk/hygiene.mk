@@ -13,7 +13,8 @@ PY ?= .local/venv-dev/bin/python
 .PHONY: check-hygiene
 TEST_TARGETS += check-hygiene
 
+#: check-hygiene — task ids on marker keywords, unique glossary terms, no private references or process tags, module READMEs
 check-hygiene:
-	@set -- tools/quality/tests/test_check_hygiene*.py; [ -f "$$1" ] || { echo "check-hygiene: no tools/quality/tests/test_check_hygiene*.py" >&2; exit 2; }; $(PY) -m pytest "$$@" -q -p no:cacheprovider
+	@set -- tools/quality/tests/test_check_hygiene*.py; [ -f "$$1" ] || { echo "check-hygiene: no tools/quality/tests/test_check_hygiene*.py" >&2; exit 2; }; mkdir -p .local/pytest-tmp && $(PY) -m pytest --basetemp=.local/pytest-tmp/check-hygiene "$$@" -q -p no:cacheprovider
 	$(PY) tools/quality/check_hygiene.py
-	@set -- tools/quality/tests/test_check_readmes*.py; [ -f "$$1" ] || { echo "check-hygiene: no tools/quality/tests/test_check_readmes*.py" >&2; exit 2; }; $(PY) -m pytest "$$@" -q -p no:cacheprovider && $(PY) tools/quality/check_readmes.py
+	@set -- tools/quality/tests/test_check_readmes*.py; [ -f "$$1" ] || { echo "check-hygiene: no tools/quality/tests/test_check_readmes*.py" >&2; exit 2; }; mkdir -p .local/pytest-tmp && $(PY) -m pytest --basetemp=.local/pytest-tmp/check-hygiene-readmes "$$@" -q -p no:cacheprovider && $(PY) tools/quality/check_readmes.py

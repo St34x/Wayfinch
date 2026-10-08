@@ -57,6 +57,7 @@ PRIVATE_FOLDER_EXEMPT = frozenset({
     "tools/check-spdx.sh",
     "tools/tests/test_check_spdx.sh",
     "tools/tests/test_check_spdx_edges.sh",
+    "tools/codegen/gen_make_docs.py",
     "tools/quality/check_size.py",
     "tools/quality/tests/test_check_size.py",
     "tools/quality/check_hygiene.py",

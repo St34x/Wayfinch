@@ -3,8 +3,9 @@
 #
 # Tests the Makefile fragment wiring: `make test` = secret-scan + every target a mk/*.mk fragment appends
 # to TEST_TARGETS. Cases 1-5 run against a copy of the Makefile in a temp dir with a stub secret scan
-# (fast, independent of other fragments); case 6 plants mk/zz-demo.mk in the real tree and runs the
-# real `make test` (the fragment is removed afterwards, also on failure).
+# (fast, independent of other fragments); case 6 plants mk/zz-demo.mk in the real tree, checks that
+# `gen_make_docs.py --check` flags it (no live ENGINEERING.md section 10 row, stale reference), then runs the
+# real `make test -o check-make-docs` (that gate skipped; the fragment is removed afterwards, also on failure).
 #
 # Usage: sh tools/tests/test_make_fragments.sh   (from the repo root)
 set -eu
@@ -41,6 +42,7 @@ write_fragment() {
 # SPDX-License-Identifier: Apache-2.0
 .PHONY: test-$1
 TEST_TARGETS += test-$1
+#: test-$1 — demo fragment $1
 test-$1:
 	@echo "fragment $1 ran"
 	@touch $2
@@ -95,7 +97,14 @@ if [ -e "$DEMO" ]; then
 else
 	PLANTED=1
 	write_fragment zz-demo "$WORK/real.ran" >"$DEMO"
-	run_make "$ROOT" test
+	set +e
+	(cd "$ROOT" && python3 tools/codegen/gen_make_docs.py --check) >"$WORK/out" 2>&1
+	RC=$?
+	set -e
+	[ "$RC" -eq 1 ] && grep -q 'mk/zz-demo.mk:3: `make test` runs `test-zz-demo`, but no live row' "$WORK/out" &&
+		ok "real tree: check-make-docs flags the planted fragment" ||
+		bad "real tree: check-make-docs flags the planted fragment (rc=$RC)"
+	run_make "$ROOT" test -o check-make-docs
 	[ "$RC" -eq 0 ] && [ -f "$WORK/real.ran" ] && ok "real tree: planted mk/zz-demo.mk runs inside make test" ||
 		bad "real tree: planted mk/zz-demo.mk runs inside make test (rc=$RC)"
 	rm -f "$DEMO"

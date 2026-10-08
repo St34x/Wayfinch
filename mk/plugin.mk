@@ -7,5 +7,6 @@ PY ?= .local/venv-dev/bin/python
 .PHONY: test-plugin
 TEST_TARGETS += test-plugin
 
+#: test-plugin — unit tests of the Hermes glasses plugin (no Hermes import)
 test-plugin:
-	$(PY) -m pytest hermes-plugin/tests -q
+	mkdir -p .local/pytest-tmp && $(PY) -m pytest --basetemp=.local/pytest-tmp/test-plugin hermes-plugin/tests -q

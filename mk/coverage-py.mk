@@ -12,9 +12,10 @@ COVERAGE_PY_TESTS := $(sort $(wildcard tools/quality/tests/test_coverage_*.py))
 .PHONY: coverage-py
 TEST_TARGETS += coverage-py
 
+#: coverage-py — plugin test coverage: core files >= 90 %, other plugin files >= 70 % or their ratchet entry
 coverage-py:
 	@test -n "$(COVERAGE_PY_TESTS)" || { echo "coverage-py: no tools/quality/tests/test_coverage_*.py found" >&2; exit 1; }
-	$(PY) -m pytest $(COVERAGE_PY_TESTS) -q -p no:cacheprovider
+	mkdir -p .local/pytest-tmp && $(PY) -m pytest --basetemp=.local/pytest-tmp/coverage-py $(COVERAGE_PY_TESTS) -q -p no:cacheprovider
 	rm -rf .local/coverage-py
-	$(PY) -m pytest hermes-plugin/tests -q -p no:cacheprovider --cov --cov-config=.coveragerc --cov-report=
+	$(PY) -m pytest --basetemp=.local/pytest-tmp/coverage-py-plugin hermes-plugin/tests -q -p no:cacheprovider --cov --cov-config=.coveragerc --cov-report=
 	$(PY) tools/quality/coverage_areas.py
