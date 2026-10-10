@@ -134,7 +134,9 @@ an external signature (a fake of a framework API) may exceed the parameter limit
 - **Contract tests at every boundary**: protocol fixtures in both stacks, Hermes internal APIs we call, G2 wire bytes
   (golden byte vectors), Telegram hand-off.
 - **Property-based tests** for the envelope codec and UTF-8 cutting (Python **Hypothesis**, Kotlin
-  **kotest-property**), written with the codec (planned; no property test exists yet).
+  **kotest-property**), written with the codec: Python's are in `hermes-plugin/tests/test_envelope_text.py`
+  (`cut_utf8`, `sanitize_card_text`), `test_envelope_decode.py` (the nesting pre-scan) and
+  `test_envelope_decode_properties.py` (`decode` on any bytes, any text, mutated fixtures); Kotlin's are planned.
 - **Golden snapshot tests** for HUD layouts (planned, with the HUD): every skeleton × state renders to a 1-bit PNG
   compared with a committed golden file; an intended change updates the golden in the same commit.
 - **Fakes over mocks**: `FakeGlasses`, fake GATT, fake clock, mock LLM, fake device. Interaction mocks only where no
@@ -264,7 +266,7 @@ violation fails, and the task that fixes a file deletes its own block. New code 
 | mypy | 2.4.0 | Python static types (`--strict`) |
 | import-linter | 2.15 | Python dependency direction |
 | coverage / pytest-cov | 7.16.2 / 7.1.0 | Python coverage gates |
-| hypothesis | 6.168.3 | Python property tests (test-only; pinned, not used by any test yet) |
+| hypothesis | 6.168.3 | Python property tests (test-only; envelope codec and UTF-8 cutting) |
 | detekt-cli | 1.23.8 | Kotlin static analysis and complexity (planned: chosen version, not in the tree yet) |
 | ktlint-cli | 1.8.0 | Kotlin formatting (planned: chosen version, not in the tree yet) |
 | ArchUnit | 1.5.1 | Kotlin/JVM architecture rules (planned: chosen version, not in the tree yet) |

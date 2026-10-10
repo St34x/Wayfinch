@@ -22,13 +22,16 @@ frames against this schema; golden fixtures live in `fixtures/` (T1.03).
   schema has `additionalProperties: false` and a bound on every field — except the open objects
   `skill.call.args`, `skill.result.output` and `skill.manifest.skills[]` items, bounded only by `maxProperties`
   (see *Limits and validation notes*).
-- String limits are byte limits, which the codecs must enforce (neither codec is built yet; the `codec-valid/` and
-  `codec-invalid/` fixtures fix the behaviour); the schema's `maxLength` is the same number as a code-point bound,
+- String limits are byte limits, which the codecs must enforce: the server-side codec
+  (`hermes-plugin/glasses/envelope.py`, `envelope_encode.py`) enforces them on every frame it decodes or encodes
+  (the WS server that uses it is planned in T1.07; the Android codec is planned); the `codec-valid/` and
+  `codec-invalid/` fixtures fix the behaviour. The schema's `maxLength` is the same number as a code-point bound,
   so the schema never rejects what the byte rule accepts.
 - Schema, these tables and the fixtures change together; the generated plugin types are regenerated
   (`make check-codegen`) and `make test-protocol` stays green.
-- Delivery rule for the implementations (not built yet): S→D-only frames carry `seq` and stay outboxed until
-  acked; D→S frames never carry `seq` and are processed at most once (Delivery).
+- Delivery rule: S→D-only frames carry `seq` and stay outboxed until acked; D→S frames never carry `seq` and are
+  processed at most once (Delivery). The server-side codec enforces the `seq` rules (the WS server that uses it is
+  planned in T1.07); the outbox (T1.09) and the dedupe by `id` (T1.08) are planned.
 
 ## Envelope
 
@@ -108,7 +111,8 @@ One rule, used by the field table above and by both codecs:
 - **D→S frames** never carry `seq`; they are processed at most once (dedupe by `id` within 10 min).
 
 The schema cannot see the direction of a frame, so the codec (T1.06 on the server, the Android codec on the phone)
-rejects `seq` on any D→S frame, including `error`. On reconnect the server replays every outboxed frame after
+rejects `seq` on any D→S frame, including `error`; the server's `encode` also refuses every D→S-only type (reason
+`direction`). On reconnect the server replays every outboxed frame after
 `hello.lastAckedSeq`; the device de-duplicates by `seq`.
 
 ## WebSocket close codes
@@ -132,10 +136,27 @@ answered with HTTP `401` (missing/invalid credentials) or `403` (revoked device)
 `unsupported_version`, `outbox_overflow`, `lane_forbidden`, `lane_unrouted`, `provider_down` (meeting state).
 New codes must match `^[a-z][a-z0-9_]{0,63}$`.
 
+The server-side codec (`hermes-plugin/glasses/envelope.py`) refuses a D→S frame with one of the codes below; its
+`error_frame` builds the matching `error` frame without `seq` or `corr` (the WS server that sends it is planned in
+T1.07). The checks run in the order of the module docstring; the first one that fails decides the code. The
+`message` is fixed per code and never echoes input.
+
+| code | rule that yields it |
+|---|---|
+| `frame_too_large` | payload over its frame cap (see *Frame caps* below) |
+| `frame_too_deep` | the raw nesting pre-scan, or an open field (`skill.call.args`, `skill.result.output`, a `skill.manifest.skills[]` item) nested deeper than 32 |
+| `invalid_text` | bytes that are not UTF-8; a string or key that is not Unicode scalar values (lone surrogate) |
+| `invalid_json` | not one JSON text; `NaN`/`Infinity`; a number literal too large for a finite float (`1e999`); a key repeated in one object |
+| `invalid_frame` | fails the envelope schema; Feb 29 of a common year; a non-integer spelling (`1.0`, `1e0`) in an integer field; `seq` on a D→S-only type, `ping` or `pong`, and an S→D-only type without `seq` (the schema refuses these first) |
+| `invalid_seq` | `seq` on a device-sent `error`, or on an S→D-only type sent by the device (the schema requires `seq` there, so only the direction rule can refuse it) |
+| `field_too_long` | a string over its UTF-8 byte limit (limits table) |
+
 ## Limits and validation notes
 
-**Frame caps** (bytes of the UTF-8 WebSocket payload, checked by the codec *before* JSON parsing): 64 KiB (65536 B)
-for every frame; 32 KiB (32768 B) for `audio.chunk` and `meeting.audio`.
+**Frame caps** (bytes of the UTF-8 WebSocket payload): 64 KiB (65536 B) for every frame, checked by the codec
+*before* JSON parsing; 32 KiB (32768 B) for `audio.chunk` and `meeting.audio`, checked before parsing when the raw
+text spells the top-level `"type"` key and value verbatim, and after parsing when they are spelled with `\u`
+escapes (the escaped spelling is refused there, so it gains nothing). Both refusals are `frame_too_large`.
 
 **String limits are UTF-8 byte limits.** Both stacks measure a string as the number of bytes of its UTF-8 encoding
 (Python `len(s.encode("utf-8"))`, Kotlin `s.encodeToByteArray().size`) — never code points, never UTF-16 units
@@ -182,10 +203,17 @@ Other rules:
   ranges: month 01–12, day 01–31/30/29 by month (Feb 29 in a non-leap year is left to the codec), hour 00–23,
   minute and second 00–59 (no leap second), 1–9 fraction digits, offset `Z` or `+hh:mm`/`-hh:mm` up to ±14:00.
 - The codec also rejects strings that are not valid Unicode scalar values (lone surrogates).
-- Nesting depth of `skill.call.args` (codec, max 32) is counted inside `args`: the `args` object itself is level 1,
-  each nested object or array adds 1, scalars add none; depth 33 is rejected. A codec that pre-scans the raw text of
-  the whole frame counts the two enclosing levels too (envelope object, `body` object), so the pre-scan allows up to
-  34 nested open brackets (`{`/`[` outside strings) and rejects 35. Fixtures: `s2d-skill-call-args-depth-32/33`.
+- JSON parsing is strict: a key repeated in one object is `invalid_json`, because parsers differ on which duplicate
+  wins (a parser differential: the phone and the server could read different frames); so are `NaN`/`Infinity` and
+  a number literal too large for a finite float (`1e999`). Integer fields (`v`, `seq`, `durationMs`, ...) must be
+  integer literals: `1.0` or `1e0` passes the schema but is `invalid_frame`.
+- Nesting depth of the open objects `skill.call.args`, `skill.result.output` and each `skill.manifest.skills[]` item
+  (codec, max 32) is counted from the named value: the value itself (the `args` object, the `output` object, one
+  `skills[]` item) is level 1, each nested object or array adds 1, scalars add none; depth 33 is rejected
+  (`frame_too_deep`). This per-field count is authoritative. The codec's raw pre-scan of the whole frame is only a
+  coarse recursion guard and uses the largest enclosing offset (envelope object, `body` object, `skills` array = 3),
+  so it allows up to 35 nested open brackets (`{`/`[` outside strings) for any frame and rejects 36. Fixtures:
+  `s2d-skill-call-args-depth-32/33`, `d2s-skill-result-output-depth-32/33`, `d2s-skill-manifest-item-depth-32/33`.
 - `msg.out.longRef.truncated` (boolean, optional, requires `fullText`): `true` means `fullText` holds only the start
   of the answer (cut at 4096 B on a code-point boundary) and the phone shows `truncated — full text in <channel>`;
   absent means `fullText` is complete or absent. Producers omit `truncated` rather than send `false`; consumers

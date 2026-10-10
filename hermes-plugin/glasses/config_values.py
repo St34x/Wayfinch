@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Value rules of the plugin configuration that a schema cannot express, and building the config value.
 
-Pure (no I/O), but not a core module: it needs ``ipaddress``, ``difflib`` and ``os.path``, which the core import
-allowlist (``tools/quality/check_core_purity.py``) does not list. The schema arrives as a parsed mapping.
+A pure core module (``core-purity`` in ``.importlinter``; ``tools/quality/check_core_purity.py``): no I/O, no
+``os``. The schema arrives as a parsed mapping.
 
 * ``host`` is a loopback IP literal (hostnames, ``localhost`` included, are refused);
 * ``public_url`` is empty or a strict ``wss://`` URL, stored in normal form;
@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import difflib
 import ipaddress
-import os
 import re
 from collections.abc import Callable, Iterable, Mapping
 from typing import Any
@@ -64,7 +63,8 @@ def _is_clean_str(value: Any) -> bool:
 
 
 def _empty_or_abs_path(value: Any) -> bool:
-    return value in (None, "") or (_is_clean_str(value) and os.path.isabs(value))
+    """Empty, or a clean absolute POSIX path: for a ``str`` this is exactly ``posixpath.isabs`` (a leading ``/``)."""
+    return value in (None, "") or (_is_clean_str(value) and value.startswith("/"))
 
 
 def _public_host(hostname: str) -> str | None:

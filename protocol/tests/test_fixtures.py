@@ -20,8 +20,10 @@ FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 INDEX = json.loads((FIXTURES / "index.json").read_text(encoding="utf-8"))
 KINDS = ("valid", "invalid", "codec-valid", "codec-invalid")
 NEUTRAL_LANES = {"assistant", "work"}
-MAX_ARGS_DEPTH = 32  # README: depth counted inside skill.call.args, the args object is level 1
-LEVELS_ABOVE_ARGS = 2  # envelope object + body object, seen by a raw-text pre-scan of the whole frame
+MAX_FIELD_DEPTH = 32  # README: depth counted from the named open value, which is level 1
+PRESCAN_MAX = 35  # README: the raw pre-scan allows 35 nested open brackets for any frame, rejects 36
+# Levels a raw-text pre-scan of the whole frame sees above each open value: envelope + body (+ the skills array).
+ENCLOSING = {"skill.call.args": 2, "skill.result.output": 2, "skill.manifest.skills[]": 3}
 
 
 @pytest.fixture(scope="module")
@@ -71,6 +73,13 @@ def _field(frame, dotted):
     return node
 
 
+def _field_depth(frame, dotted):
+    """Depth of the open value named by `dotted`; for `x[]` the deepest item of the list."""
+    if dotted.endswith("[]"):
+        return max(_depth(item) for item in _field(frame, dotted[:-2]))
+    return _depth(_field(frame, dotted))
+
+
 @pytest.mark.parametrize("kind", KINDS)
 def test_index_matches_directory(kind):
     on_disk = sorted(p.name for p in (FIXTURES / kind).glob("*.json"))
@@ -115,7 +124,7 @@ def test_codec_fixture_metadata(kind):
         if "bytes" in e:
             assert len(_field(frame, e["field"]).encode("utf-8")) == e["bytes"], e["file"]
         if "depth" in e:
-            assert _depth(frame["body"]["args"]) == e["depth"], e["file"]
+            assert _field_depth(frame, e["field"]) == e["depth"], e["file"]
 
 
 def test_codec_fixtures_cover_required_rules():
@@ -128,6 +137,8 @@ def test_codec_fixtures_cover_required_rules():
         "full-text",
         "depth-32",
         "depth-33",
+        "skill-result-output-depth",
+        "skill-manifest-item-depth",
         "2028-02-29",
         "2027-02-29",
         "lone-surrogate",
@@ -153,33 +164,48 @@ def test_byte_fixtures_sit_at_or_over_the_readme_limit(kind):
 
 def test_readme_states_the_depth_rule():
     text = " ".join(README_PATH.read_text(encoding="utf-8").split())
-    assert "the `args` object itself is level 1, each nested object or array adds 1" in text
-    assert f"max {MAX_ARGS_DEPTH})" in text
-    assert f"allows up to {MAX_ARGS_DEPTH + LEVELS_ABOVE_ARGS} nested open brackets" in text
+    fields = "`skill.call.args`, `skill.result.output` and each `skill.manifest.skills[]` item"
+    assert f"Nesting depth of the open objects {fields} (codec, max {MAX_FIELD_DEPTH})" in text
+    assert "is level 1, each nested object or array adds 1" in text
+    assert f"allows up to {PRESCAN_MAX} nested open brackets" in text
+    assert f"for any frame and rejects {PRESCAN_MAX + 1}" in text
 
 
 def _depth_entries():
     return [(k, e) for k in ("codec-valid", "codec-invalid") for e in INDEX[k] if "depth" in e]
 
 
-def test_args_depth_counted_from_args_as_level_one():
+DEPTHS = {
+    "s2d-skill-call-args-depth-32.json": (32, 34),
+    "s2d-skill-call-args-depth-33.json": (33, 35),
+    "d2s-skill-result-output-depth-32.json": (32, 34),
+    "d2s-skill-result-output-depth-33.json": (33, 35),
+    "d2s-skill-manifest-item-depth-32.json": (32, 35),
+    "d2s-skill-manifest-item-depth-33.json": (33, 36),
+}  # file -> (per-field depth, raw bracket depth of the whole frame)
+
+
+def test_open_field_depth_counted_from_the_named_value():
     seen = {}
     for kind, e in _depth_entries():
-        depth = _depth(load(kind, e["file"])["body"]["args"])
-        assert depth == e["depth"], e["file"]
-        assert (depth <= MAX_ARGS_DEPTH) == (kind == "codec-valid"), e["file"]
+        depth = _field_depth(load(kind, e["file"]), e["field"])
+        assert (depth <= MAX_FIELD_DEPTH) == (kind == "codec-valid"), e["file"]
         seen[e["file"]] = depth
-    assert seen == {"s2d-skill-call-args-depth-32.json": 32, "s2d-skill-call-args-depth-33.json": 33}
+    assert seen == {name: pair[0] for name, pair in DEPTHS.items()}
 
 
-def test_frame_level_prescan_allows_two_enclosing_levels():
+def test_frame_level_prescan_adds_the_enclosing_levels():
     seen = {}
     for kind, e in _depth_entries():
         raw = _raw_bracket_depth((FIXTURES / kind / e["file"]).read_text(encoding="utf-8"))
-        assert raw == e["depth"] + LEVELS_ABOVE_ARGS, e["file"]
-        assert (raw <= MAX_ARGS_DEPTH + LEVELS_ABOVE_ARGS) == (kind == "codec-valid"), e["file"]
+        assert raw == e["depth"] + ENCLOSING[e["field"]], e["file"]
         seen[e["file"]] = raw
-    assert seen == {"s2d-skill-call-args-depth-32.json": 34, "s2d-skill-call-args-depth-33.json": 35}
+    assert seen == {name: pair[1] for name, pair in DEPTHS.items()}
+
+
+def test_every_codec_valid_fixture_passes_the_prescan():
+    for e in INDEX["codec-valid"]:
+        assert _raw_bracket_depth((FIXTURES / "codec-valid" / e["file"]).read_text(encoding="utf-8")) <= PRESCAN_MAX
 
 
 @pytest.mark.parametrize(

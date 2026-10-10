@@ -58,6 +58,7 @@ hand):
 | Area | What is there | Where |
 |---|---|---|
 | Protocol | Envelope v1 as JSON Schema 2020-12 (27 frame types, UTF-8 byte limits, delivery rules, close codes), golden valid/invalid fixtures and codec edge-case fixtures | [`protocol/`](protocol/) |
+| Envelope codec (server side) | Pure-core `decode`/`encode` of envelope v1: frame caps checked before parsing, strict JSON (no repeated keys, no `NaN`/`Infinity`, no lone surrogates), the schema, UTF-8 byte limits, nesting depth and the `seq` direction rules; error frames with a fixed message that never echoes input; helpers that cut text to a UTF-8 byte limit and replace bidi controls in card text. A library only: the caller injects the schema, and nothing calls the codec until the WebSocket server lands | `envelope*.py` |
 | Code generation | In-tree, stdlib-only generators: protocol schema → Python `TypedDict`s, and plugin config schema → [configuration reference](docs/reference/config.md); committed output is checked for freshness | [`tools/codegen/`](tools/codegen/), [`hermes-plugin/glasses/generated/`](hermes-plugin/glasses/generated/) |
 | Plugin skeleton | Hermes platform registration; an adapter that **fails closed** (reports "not connected", delivers nothing) until the transport lands; refusal of any allow-all / wildcard user setting | [`hermes-plugin/glasses/`](hermes-plugin/glasses/) |
 | Plugin config | JSON Schema for the plugin config with precise error messages and a generated [configuration reference](docs/reference/config.md); `config check` CLI (static checks, plus `--live` checks against a Hermes install) | `config.schema.json`, `config*.py`, `admin.py` |
@@ -65,7 +66,8 @@ hand):
 | Test harness | Scripts for an isolated test instance of a pinned Hermes Agent with a minimal test platform and a mock LLM on loopback ports, never touching a real install ([setup](docs/test-hermes.md)); `make test` checks the scripts against a fake `hermes` | [`tools/test-hermes/`](tools/test-hermes/), [`tools/mock-llm/`](tools/mock-llm/) |
 | Quality gates | Secret scan, SPDX headers, size limits, repo hygiene (task ids on `TODO`s, unique glossary terms, no private references), module READMEs, ruff, mypy `--strict` (with a ratchet for modules not typed yet), the Python 3.11 floor, import boundaries, codegen freshness (protocol types and the configuration reference), plugin coverage (core files ≥90 %, other files ≥70 %), hash-pinned installs; docs gates: internal links and anchors resolve and every public document is indexed, a generated [make-target reference](docs/reference/make-targets.md) that must match `mk/*.mk` and the gate table, and a dependency ledger that must list exactly the direct dependencies at their pins | [`mk/`](mk/), [`tools/quality/`](tools/quality/) |
 
-**Planned** (designed, not built): the envelope codec and the WebSocket server with device authentication; the outbox;
+**Planned** (designed, not built): the WebSocket server with device authentication, which will be the codec's first
+caller; the outbox;
 approval and clarify cards; the voice path; the admin CLI for the device CA, enrolment and revocation; the long-answer
 router; reverse-proxy examples; and the whole **Android app**: the G2 Bluetooth driver, the HUD, the companion screen,
 enrolment, phone skills and the phone bridge. Meeting mode comes later still. Also still to come: CI, the Kotlin

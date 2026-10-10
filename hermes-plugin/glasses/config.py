@@ -18,7 +18,8 @@ Every problem is reported, one message per path: ``<path>: <problem> (got <value
 print it as ``glasses.<message>``. A string value is shown only for keys the schema marks ``x-echo``
 (names, enum values, paths) and never when it contains ``@`` or ``://``; never for URL- or
 credential-capable keys (``public_url``, ``meeting.endpoint``/``provider``/``llm.*``) or for unknown or
-refused keys. An unknown key whose name contains ``@`` or ``://`` is named ``<a key containing '@' or '://'>``.
+refused keys. An unknown key is named only when its name looks like a key name (1-32 characters, an ASCII letter
+first, then letters, ``_`` and ``-``, at most 2 digits); any other name is ``<an unknown key of N characters>``.
 Patterns are anchored and guarded against a trailing newline (Python ``$``); code uses ``re.fullmatch`` only.
 
 Unknown keys are reported as warnings, not errors -- except the access-control keys the Hermes
@@ -134,7 +135,10 @@ def _validator() -> _Validator:
         jsonschema = importlib.import_module("jsonschema")
     except ImportError:
         raise DependencyMissing("jsonschema") from None
-    base = jsonschema.Draft202012Validator
+    try:  # a jsonschema too old for draft 2020-12 is a missing dependency too (exit 2, no traceback)
+        base = jsonschema.Draft202012Validator
+    except AttributeError:
+        raise DependencyMissing("jsonschema") from None
     checker = base.TYPE_CHECKER.redefine("integer", _strict_integer)
     validator: _Validator = jsonschema.validators.extend(base, type_checker=checker)(schema())
     return validator
@@ -214,5 +218,5 @@ def validate_config(platform_config: Any, *, log_level: int = logging.WARNING) -
         logger.error("glasses config invalid: %s", exc)
         return False
     except Exception as exc:  # noqa: BLE001 - outermost gateway hook: a validator must not crash the gateway
-        logger.warning("glasses config validation error: %s", type(exc).__name__)
+        logger.log(log_level, "glasses config validation error: %s", type(exc).__name__)
         return False

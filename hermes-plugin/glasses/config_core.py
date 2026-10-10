@@ -53,6 +53,10 @@ DEFAULTS: dict[str, Any] = {
 }
 
 ECHO_MAX_CHARS = 64
+# An unknown key is named in a message only in this shape (1-32 characters, an ASCII letter first, then letters,
+# '_' and '-', at most 2 digits); every schema key fits it (test_config_unknown_key_names.py).
+_KEY_LIKE_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,31}")
+_KEY_LIKE_MAX_DIGITS = 2
 MISSING = object()
 
 
@@ -111,9 +115,15 @@ def may_hold_credentials(text: str) -> bool:
 
 
 def key_name(key: Any) -> str:
-    """How an unknown key's name appears in a message: as written, unless it may hold credentials."""
+    """How an unknown key's name appears in a message: as written only when it looks like a key name.
+
+    Any other name (a pasted token, a URL, a line break or escape character, a very long name, a non-string key)
+    is ``<an unknown key of N characters>``: never echoed, so it can neither leak a secret nor forge a line.
+    """
     name = str(key)
-    return "<a key containing '@' or '://'>" if may_hold_credentials(name) else name
+    if isinstance(key, str) and _KEY_LIKE_RE.fullmatch(key) and sum(c.isdigit() for c in key) <= _KEY_LIKE_MAX_DIGITS:
+        return key
+    return f"<an unknown key of {_count(len(name), 'character')}>"
 
 
 def describe(value: Any, echo: bool) -> str:

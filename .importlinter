@@ -23,6 +23,12 @@ type = forbidden
 source_modules =
     glasses.config_access
     glasses.config_core
+    glasses.config_values
+    glasses.envelope
+    glasses.envelope_encode
+    glasses.envelope_rules
+    glasses.envelope_scan
+    glasses.envelope_text
     glasses.hermes_merge
 forbidden_modules =
     # plugin adapters (listed before they exist, so a new adapter is covered when it is created)

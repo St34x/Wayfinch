@@ -27,7 +27,7 @@ commit.
 - ruff too-many-arguments without PLR0913, rule names instead of codes, preview → [`ruff-preview-shows-rule-names.md`](ruff-preview-shows-rule-names.md)
 - gitleaks failed, tool error not a leak, FTL unable to load gitleaks config, exit codes → [`secret-scan-tool-error-not-a-leak.md`](secret-scan-tool-error-not-a-leak.md)
 - Forbidden: bot was blocked by the user, long answer failed → [`telegram-bot-blocked-forbidden.md`](telegram-bot-blocked-forbidden.md)
-- the Python module 'jsonschema' is not installed, glasses config invalid, config check exit 2 → [`glasses-jsonschema-not-installed.md`](glasses-jsonschema-not-installed.md)
+- the Python module 'jsonschema' is not installed (also jsonschema < 4.0, no Draft202012Validator), glasses config invalid, config check exit 2 → [`glasses-jsonschema-not-installed.md`](glasses-jsonschema-not-installed.md)
 - mypy Success but untyped code, disable_error_code, mypy: ignore-errors, module-level type: ignore, no_type_check, check-mypy-config → [`mypy-strict-silently-bypassed.md`](mypy-strict-silently-bypassed.md)
 - Module does not exist, No matches for ignored import, subpackages of external packages are not valid, lint-imports, import-linter → [`import-linter-contract-errors.md`](import-linter-contract-errors.md)
 - io.open passes, Contracts: 1 kept, 0 broken, denylist, import requests in core, datetime.now, allowlist → [`import-linter-denylist-passes-io.md`](import-linter-denylist-passes-io.md)

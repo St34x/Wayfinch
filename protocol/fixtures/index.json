@@ -1,6 +1,6 @@
 {
   "$comment": "SPDX-License-Identifier: Apache-2.0",
-  "description": "Golden protocol fixtures (T1.03). valid/: schema-valid frames, >=1 per type. invalid/: schema-invalid frames. codec-valid/ and codec-invalid/: schema-valid frames for rules the schema cannot express (UTF-8 byte limits, seq direction, nesting depth, lone surrogates, Feb 29 in non-leap years); the codec accepts codec-valid and rejects codec-invalid. File-name prefix d2s-/s2d- = direction the frame travels. Depth (codec-valid/codec-invalid entries): skill.call.args nesting depth, counted as defined in protocol/README.md (Limits and validation notes). Limit (entries with bytes): the max UTF-8 bytes of the field from the README limits table.",
+  "description": "Golden protocol fixtures (T1.03). valid/: schema-valid frames, >=1 per type. invalid/: schema-invalid frames. codec-valid/ and codec-invalid/: schema-valid frames for rules the schema cannot express (UTF-8 byte limits, seq direction, nesting depth, lone surrogates, Feb 29 in non-leap years); the codec accepts codec-valid and rejects codec-invalid. File-name prefix d2s-/s2d- = direction the frame travels. Depth (codec-valid/codec-invalid entries): nesting depth of the open field named in field (skill.call.args, skill.result.output, one skill.manifest.skills[] item), counted as defined in protocol/README.md (Limits and validation notes). Limit (entries with bytes): the max UTF-8 bytes of the field from the README limits table.",
   "valid": [
     {
       "file": "ack.json",
@@ -327,6 +327,20 @@
       "limit": 2000
     },
     {
+      "file": "d2s-skill-manifest-item-depth-32.json",
+      "dir": "d2s",
+      "rule": "nesting depth 32 (max allowed) of one skills[] item; raw 35 passes the pre-scan",
+      "field": "skill.manifest.skills[]",
+      "depth": 32
+    },
+    {
+      "file": "d2s-skill-result-output-depth-32.json",
+      "dir": "d2s",
+      "rule": "nesting depth 32 (max allowed)",
+      "field": "skill.result.output",
+      "depth": 32
+    },
+    {
       "file": "d2s-ts-2028-02-29.json",
       "dir": "d2s",
       "rule": "Feb 29 in a leap year",
@@ -414,6 +428,20 @@
       "field": "msg.in.text",
       "bytes": 2002,
       "limit": 2000
+    },
+    {
+      "file": "d2s-skill-manifest-item-depth-33.json",
+      "dir": "d2s",
+      "rule": "nesting depth 33 > 32 of one skills[] item; raw 36, also refused by the pre-scan",
+      "field": "skill.manifest.skills[]",
+      "depth": 33
+    },
+    {
+      "file": "d2s-skill-result-output-depth-33.json",
+      "dir": "d2s",
+      "rule": "nesting depth 33 > 32 (per-field count; raw 35 passes the pre-scan)",
+      "field": "skill.result.output",
+      "depth": 33
     },
     {
       "file": "d2s-ts-2027-02-29.json",

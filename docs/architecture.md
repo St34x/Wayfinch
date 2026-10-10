@@ -64,7 +64,7 @@ The phone has no typing UI. Configuration happens by voice or through the agent'
 
 **Server.** Everything server-side runs inside the deployer's Hermes gateway. There is no separate service. Built
 today: the plugin's platform registration, configuration check (`config check`), device registry and allow-all gate,
-and an adapter skeleton that fails closed (it reports "not connected" and delivers nothing). Everything else in this
+the server-side envelope codec (a library no server calls yet), and an adapter skeleton that fails closed (it reports "not connected" and delivers nothing). Everything else in this
 table is planned.
 
 | Component | Responsibility |
@@ -154,7 +154,9 @@ participants are untrusted input: their speech never reaches an agent session th
 The app (device, D) and the plugin (server, S) exchange JSON *envelopes* over one WebSocket. The single source of truth
 is [`protocol/envelope.schema.json`](../protocol/envelope.schema.json) (JSON Schema 2020-12). Its rules are documented
 in [`protocol/README.md`](../protocol/README.md). Python types are generated from it today; Kotlin types will be
-generated from it with the Android app.
+generated from it with the Android app. The server-side codec that enforces these rules on every frame it
+decodes or encodes is built (`hermes-plugin/glasses/envelope*.py`); the WebSocket server that will call it, the
+outbox, the dedupe by `id` and the Android codec are planned.
 
 - **Envelope:** `v`, `id` (ULID), `type`, `ts`, optional `seq`, `corr`, `lane`, and a strict `body` (no extra fields;
   every field bounded).

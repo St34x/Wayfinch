@@ -45,7 +45,7 @@ is imported by the test platform under `tools/test-hermes/`, which runs in the t
 | import-linter | 2.15 | BSD-2-Clause | dev | Import contracts: the core never imports an adapter, framework or I/O library | AST check only — misses indirect imports through other modules |
 | coverage | 7.16.2 | Apache-2.0 | dev | Branch coverage and the per-area `--fail-under` gates | stdlib `trace` — no branch coverage, no thresholds |
 | pytest-cov | 7.1.0 | MIT | dev | Collects coverage inside the pytest run the suites already use (`--cov`) | Wrapping each pytest call in `coverage run` — a second command line per gate target |
-| hypothesis | 6.168.3 | MPL-2.0 | dev | Planned (pinned, no test imports it yet): property-based tests for the envelope codec (shrinks failing inputs) | Hand-written random loops — no shrinking, no reproducible failure database |
+| hypothesis | 6.168.3 | MPL-2.0 | dev | Property-based tests of the envelope codec and UTF-8 cutting (`hermes-plugin/tests/test_envelope_text.py`, `test_envelope_decode.py`, `test_envelope_decode_properties.py`; shrinks failing inputs) | Hand-written random loops — no shrinking, no reproducible failure database |
 
 ## Tool binaries
 
@@ -72,7 +72,7 @@ when a pin changes.
 
 | Name | Licence | Reason it is allowed |
 |---|---|---|
-| hypothesis | MPL-2.0 | Test-only: meant for test files (none imports it yet), never imported by shipped code, never vendored or redistributed, not installed into the Hermes venv. MPL-2.0 is file-level copyleft and applies only to modified hypothesis files, which this project does not have. |
+| hypothesis | MPL-2.0 | Test-only: imported only by test files under `hermes-plugin/tests/`, never by shipped code, never vendored or redistributed, not installed into the Hermes venv. MPL-2.0 is file-level copyleft and applies only to modified hypothesis files, which this project does not have. |
 | pathspec | MPL-2.0 | Dev-only, transitive (required by mypy): never imported by shipped code, never vendored or redistributed, not installed into the Hermes venv; this project modifies none of its files. |
 
 No other pin in `requirements-dev.txt` carries an MPL, GPL, LGPL or AGPL licence (checked against the installed
