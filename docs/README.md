@@ -15,6 +15,7 @@ fails when one is not (or when a link or `#anchor` does not resolve). Start with
 ## Deployers and operators
 
 - [Configuration reference](reference/config.md) — every plugin config key (generated from the schema).
+- [Admin CLI](admin-cli.md) — the `glasses-admin` commands that exist today, their options and exit codes.
 - [Dependencies](dependencies.md) — every direct dependency, why it is here and the alternative rejected.
 - [Troubleshooting](troubleshooting/INDEX.md) — solved problems, one file each, searchable by error text.
 

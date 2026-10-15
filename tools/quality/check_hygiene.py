@@ -55,6 +55,8 @@ PRIVATE_DIR = ".team/"
 # Gate code (and its tests) that must name the private folder to leave it out of scope. Nothing else may.
 PRIVATE_FOLDER_EXEMPT = frozenset({
     "tools/check-spdx.sh",
+    "tools/secret-scan.sh",
+    "tools/tests/test_secret_scan.sh",
     "tools/tests/test_check_spdx.sh",
     "tools/tests/test_check_spdx_edges.sh",
     "tools/codegen/gen_make_docs.py",

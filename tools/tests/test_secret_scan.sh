@@ -154,6 +154,108 @@ else
 	bad ".gitleaksignore: first scan gave no fingerprint (rc=$RC)"
 fi
 
+# 9b. The private ignore file under the team folder is read too, and also leaves other findings alone.
+r=$(new_repo privignore)
+printf 'api_token = "%s"\n' "$(fake_token)" >"$r/fp.txt"
+run_scan --tree "$r"
+mkdir -p "$r/.team"
+sed -n 's/^Fingerprint: *//p' "$WORK/out" >"$r/.team/gitleaksignore"
+if [ "$RC" -eq 1 ] && [ -s "$r/.team/gitleaksignore" ]; then
+	run_scan --tree "$r"
+	[ "$RC" -eq 0 ] && ok "private .team/gitleaksignore fingerprint suppresses the finding" ||
+		bad "private .team/gitleaksignore fingerprint suppresses the finding (rc=$RC)"
+	printf 'api_token = "%s"\n' "$(fake_token)" >"$r/other.txt"
+	run_scan --tree "$r"
+	[ "$RC" -eq 1 ] && grep -q '^File: *other.txt$' "$WORK/out" && ok "private ignore file does not hide other findings" ||
+		bad "private ignore file does not hide other findings (rc=$RC)"
+else
+	bad "private ignore file: first scan gave no fingerprint (rc=$RC)"
+fi
+
+# 9c. Both ignore files present, the first without a trailing newline: each suppresses its own finding, and
+# the run logs a count of entries (comments and blank lines not counted), never the entries themselves.
+r=$(new_repo bothignore)
+printf 'api_token = "%s"\n' "$(fake_token)" >"$r/a.txt"
+printf 'api_token = "%s"\n' "$(fake_token)" >"$r/b.txt"
+run_scan --tree "$r"
+fa=$(sed -n 's/^Fingerprint: *\(a\.txt:.*\)$/\1/p' "$WORK/out")
+fb=$(sed -n 's/^Fingerprint: *\(b\.txt:.*\)$/\1/p' "$WORK/out")
+mkdir -p "$r/.team"
+printf '%s' "$fa" >"$r/.gitleaksignore"
+printf '%s\n# a note\n\n' "$fb" >"$r/.team/gitleaksignore"
+if [ "$RC" -eq 1 ] && [ -n "$fa" ] && [ -n "$fb" ]; then
+	run_scan --tree "$r"
+	[ "$RC" -eq 0 ] && ok "both ignore files merge even without a trailing newline in the first" ||
+		bad "both ignore files merge even without a trailing newline in the first (rc=$RC)"
+	grep -qx 'secret-scan: 2 ignore entries from .gitleaksignore .team/gitleaksignore' "$WORK/out" &&
+		! grep -qF "$fa" "$WORK/out" && ! grep -qF "$fb" "$WORK/out" &&
+		ok "ignore entries are logged as a count, not as entries" || bad "ignore entries are logged as a count"
+else
+	bad "both ignore files: first scan gave no fingerprints (rc=$RC)"
+fi
+r=$(new_repo noignore)
+run_scan --tree "$r"
+! grep -q 'ignore entries' "$WORK/out" && ok "no ignore file, no ignore log line" || bad "no ignore file, no ignore log line"
+
+# 9d. A history fingerprint is bound to its commit: a wrong commit hash suppresses nothing, the right one does.
+r=$(new_repo histignore)
+printf 'api_token = "%s"\n' "$(fake_token)" >"$r/old.txt"
+git -C "$r" add old.txt
+git -C "$r" -c user.name=test -c user.email=test@example.invalid commit -q -m leak
+git -C "$r" rm -q old.txt
+git -C "$r" -c user.name=test -c user.email=test@example.invalid commit -q -m remove
+run_scan --history "$r"
+fh=$(sed -n 's/^Fingerprint: *\([0-9a-f]\{40\}:old\.txt:.*\)$/\1/p' "$WORK/out")
+mkdir -p "$r/.team"
+if [ "$RC" -eq 1 ] && [ -n "$fh" ]; then
+	printf '%040d:%s\n' 0 "${fh#*:}" >"$r/.team/gitleaksignore"
+	run_scan --history "$r"
+	[ "$RC" -eq 1 ] && grep -q '^File: *old.txt$' "$WORK/out" && ok "history fingerprint with a wrong commit hash does not suppress" ||
+		bad "history fingerprint with a wrong commit hash does not suppress (rc=$RC)"
+	printf '%s\n' "$fh" >"$r/.team/gitleaksignore"
+	run_scan --history "$r"
+	[ "$RC" -eq 0 ] && ok "history fingerprint with the right commit hash suppresses" ||
+		bad "history fingerprint with the right commit hash suppresses (rc=$RC)"
+else
+	bad "history ignore: first scan gave no fingerprint (rc=$RC)"
+fi
+
+if [ "$(id -u)" -ne 0 ]; then
+	# 9e. Fail closed: an ignore file that cannot be read is a tool error (rc 2), never a smaller ignore set that
+	# still scans. --history, so the failing step is the merge, not the copy of the working tree.
+	for ign in .team/gitleaksignore .gitleaksignore; do
+		r=$(new_repo "unreadignore")
+		printf 'api_token = "%s"\n' "$(fake_token)" >"$r/fp.txt"
+		git -C "$r" add fp.txt
+		git -C "$r" -c user.name=test -c user.email=test@example.invalid commit -q -m leak
+		mkdir -p "$r/.team"
+		printf '# placeholder\n' >"$r/$ign"
+		chmod 000 "$r/$ign"
+		run_scan --history "$r"
+		chmod 600 "$r/$ign"
+		[ "$RC" -eq 2 ] && grep -q 'cannot read' "$WORK/out" && ! grep -q 'no leaks found' "$WORK/out" &&
+			ok "unreadable $ign fails the scan (rc 2)" || bad "unreadable $ign fails the scan (rc=$RC)"
+		rm -rf "$r"
+	done
+	# 9f. The merged ignore file lives inside the private temp dir (mktemp -d), not at a shared fixed path: with that
+	# dir made read-only right after the archive is unpacked (stand-in tar), creating it fails (rc 2).
+	mkdir -p "$WORK/faketar" "$WORK/t9f"
+	printf '#!/bin/sh\n"$REAL_TAR" "$@" || exit $?\n[ "$1" != -xzf ] || chmod 500 "$4"\n' >"$WORK/faketar/tar"
+	chmod 755 "$WORK/faketar/tar"
+	r=$(new_repo tmpignore)
+	real_tar=$(command -v tar)
+	set +e
+	PATH="$WORK/faketar:$PATH" REAL_TAR="$real_tar" TMPDIR="$WORK/t9f" sh "$SCAN" --history "$r" >"$WORK/out" 2>&1
+	RC=$?
+	set -e
+	chmod -R u+w "$WORK/t9f"
+	[ "$RC" -eq 2 ] && grep -q 'cannot create' "$WORK/out" && ! grep -q 'no leaks found' "$WORK/out" &&
+		ok "merged ignore file is created inside the private temp dir (rc 2 when that fails)" ||
+		bad "merged ignore file is created inside the private temp dir (rc=$RC)"
+else
+	echo "skip - unreadable ignore file and read-only temp dir (running as root)"
+fi
+
 # 10. Fail closed: a file that cannot be read makes the scan fail (rc 2), never a partial "no leaks".
 if [ "$(id -u)" -ne 0 ]; then
 	r=$(new_repo unreadable)

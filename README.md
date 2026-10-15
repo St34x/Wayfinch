@@ -3,7 +3,8 @@
 
 Wayfinch turns **Even Realities G2** smart glasses into a voice and heads-up-display front-end for a self-hosted AI
 agent built on [Hermes Agent](https://hermes-agent.nousresearch.com/docs), the open-source agent framework. You say
-the glasses' built-in wake phrase or press the temple. The phone captures the command and sends it to your own server.
+the glasses' built-in wake phrase or press the temple. The phone captures the command, has it transcribed and sends the
+text to your own server.
 The agent's short answer appears on the glasses a few seconds later. Long answers go to a chat channel your agent
 already uses. Two parts make this work: an **Android companion app** that talks to the glasses directly over Bluetooth
 LE, and a **Hermes gateway plugin** (`glasses`) that connects the app to your agents over one mutually-authenticated
@@ -31,17 +32,24 @@ flowchart LR
         end
     end
     C["Chat channel<br/>(e.g. Telegram)"]
+    S["Speech-to-text provider<br/>(streaming, e.g. Soniox)"]
     G <-->|"BLE"| A
+    A -->|"command audio, short-lived token"| S
     A <-->|"WSS, mTLS + device token"| P
     P <-->|"loopback"| GP
     GP <--> AG
     AG -.->|"long answers"| C
 ```
 
+This is the planned design; [Status](#status) lists what exists today.
+
 1. The glasses detect their own wake phrase (or you long-press the temple). The app turns the glasses mic on only
-   for that one command (until end of speech, at most 30 s) and streams it to the plugin.
-2. The plugin hands the clip to the gateway as a voice message. The gateway transcribes it with the speech-to-text
-   provider it already has configured, and an agent profile answers.
+   for that one command (until end of speech, at most 30 s).
+2. The app streams the command from the phone directly to a streaming speech-to-text provider (Soniox), using a
+   short-lived token that the plugin issues for that one command. The provider key stays on your server. Only the
+   final text goes to the plugin, and an agent profile answers. **Fallback:** when streaming speech-to-text is not
+   configured or not available, the app sends the recorded clip to the plugin instead, and the gateway transcribes it
+   with the speech-to-text provider it already has configured.
 3. A short answer travels back over the same connection and is drawn on the glasses. A long one is delivered to
    the owning profile's chat channel, and the glasses show a one-line pointer to it.
 4. Results of longer jobs, approval requests and clarifying questions are pushed to the glasses later. They wait in an
@@ -63,12 +71,17 @@ hand):
 | Plugin skeleton | Hermes platform registration; an adapter that **fails closed** (reports "not connected", delivers nothing) until the transport lands; refusal of any allow-all / wildcard user setting | [`hermes-plugin/glasses/`](hermes-plugin/glasses/) |
 | Plugin config | JSON Schema for the plugin config with precise error messages and a generated [configuration reference](docs/reference/config.md); `config check` CLI (static checks, plus `--live` checks against a Hermes install) | `config.schema.json`, `config*.py`, `admin.py` |
 | Device registry | Token stored only as SHA-256, constant-time verification, revocation with tombstones, atomic `0600` writes, fails closed on a corrupt or foreign-owned file | `registry.py` |
+| Signer client, `/enroll` relay, admin CLI | A client for the unix socket of the separate device-CA signer (a service built outside this repository, planned; the plugin holds no CA key and the tests use a fake signer): strict request and answer checks, owner and peer-uid checks, one deadline per call. The `/enroll` relay (request checks, rate limit, then the signer's `enrol` op); no HTTP server mounts it yet. The `glasses-admin` commands `config check`, `crl`, `crl --check` and `revoke` ([reference](docs/admin-cli.md)) | `signer_client.py`, `enroll.py`, `admin*.py`, `crl_check.py` |
 | Test harness | Scripts for an isolated test instance of a pinned Hermes Agent with a minimal test platform and a mock LLM on loopback ports, never touching a real install ([setup](docs/test-hermes.md)); `make test` checks the scripts against a fake `hermes` | [`tools/test-hermes/`](tools/test-hermes/), [`tools/mock-llm/`](tools/mock-llm/) |
 | Quality gates | Secret scan, SPDX headers, size limits, repo hygiene (task ids on `TODO`s, unique glossary terms, no private references), module READMEs, ruff, mypy `--strict` (with a ratchet for modules not typed yet), the Python 3.11 floor, import boundaries, codegen freshness (protocol types and the configuration reference), plugin coverage (core files ≥90 %, other files ≥70 %), hash-pinned installs; docs gates: internal links and anchors resolve and every public document is indexed, a generated [make-target reference](docs/reference/make-targets.md) that must match `mk/*.mk` and the gate table, and a dependency ledger that must list exactly the direct dependencies at their pins | [`mk/`](mk/), [`tools/quality/`](tools/quality/) |
 
 **Planned** (designed, not built): the WebSocket server with device authentication, which will be the codec's first
 caller; the outbox;
-approval and clarify cards; the voice path; the admin CLI for the device CA, enrolment and revocation; the long-answer
+approval and clarify cards; the voice path; the rest of enrolment and revocation: the HTTP server that mounts `/enroll`,
+the signer service itself (built outside this repository), the app's enrolment client, `glasses-admin list` (T1.15f),
+the admin-socket server with the live cut that `revoke` asks for (T1.63a), and the plugin's daily `crl --check` run
+(schedule it yourself until then:
+[CRL has expired](docs/troubleshooting/nginx-crl-expired-rejects-all-devices.md)); the long-answer
 router; reverse-proxy examples; and the whole **Android app**: the G2 Bluetooth driver, the HUD, the companion screen,
 enrolment, phone skills and the phone bridge. Meeting mode comes later still. Also still to come: CI, the Kotlin
 gates, the licence check, the CLI reference and doc tests (see [ENGINEERING.md §10](ENGINEERING.md#10-gates)). The
@@ -85,7 +98,11 @@ powerful tools, so it is treated like a privileged credential:
 
 - **Mutual TLS with per-device certificates.** The app generates its key in the Android Keystore (non-exportable). A
   separate device CA, used for nothing else, signs its certificate. Each device also gets a 256-bit token, which the
-  server stores only as a hash. *(Registry: built. CA, enrolment, app: planned.)*
+  server stores only as a hash. *(Registry and the device CRL commands (`crl` through the signer, `crl --check`):
+  built. The device CA and certificate issuance live in a separate signer service (planned); the plugin holds no CA
+  key. The revocation command `revoke` (signer `revoke`, then the plugin's admin socket): built; the live cut and the
+  admin-socket server: planned (T1.63a). The `/enroll` relay in the plugin: built, mounted by nothing yet (T1.07).
+  Enrolment in the app and the signer service: planned.)*
 - **Instant revocation.** Revoking a device cuts its live connection within a second, purges its outbox, denies its
   pending approvals and closes its phone-bridge sessions. This is done by the plugin itself, so it does not depend on
   the proxy's CRL support. *(Registry tombstones: built. Live cut: planned.)*
@@ -158,7 +175,7 @@ tools/*.sh              secret scan (pinned gitleaks) and SPDX check
 tools/tests/            shell tests of those scripts, the make wiring and the hash-pinned venv install
 mk/                     make fragments; each component wires in its own test target
 deploy/examples/        example plugin configuration (example.com values)
-docs/                   architecture, dependency ledger, glossary, configuration and make-target references,
+docs/                   architecture, admin CLI, dependency ledger, glossary, configuration and make-target references,
                         test-instance setup, troubleshooting
 ENGINEERING.md          engineering standards
 ```

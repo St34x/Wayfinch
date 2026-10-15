@@ -36,7 +36,6 @@ EXTRA_PATH = ("gateway", "platforms", "glasses", "extra")
 # Example values where the default says nothing about a real deployment: example.com only, no deployment values.
 EXAMPLES: Mapping[str, object] = {
     "public_url": "wss://glasses.example.com/ws",
-    "edge.tls_dir": "/etc/nginx/glasses",
     "meeting.endpoint": "stt.example.com",
 }
 LINE_BREAKS = "[\\n\\r\\u0085\\u2028\\u2029]"

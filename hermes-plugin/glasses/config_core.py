@@ -48,15 +48,21 @@ DEFAULTS: dict[str, Any] = {
     "client_cert_encoding": "pem-urlescaped",
     "long_threshold": 280,
     "long_answers": {"platform": "telegram"},
-    "edge": {"kind": "nginx", "tls_dir": ""},
+    "signer": {"socket": "", "user": "", "public_dir": ""},
     "meeting": {},
 }
 
 ECHO_MAX_CHARS = 64
-# An unknown key is named in a message only in this shape (1-32 characters, an ASCII letter first, then letters,
-# '_' and '-', at most 2 digits); every schema key fits it (test_config_unknown_key_names.py).
+# An unknown key is named in a message only when it is a near-miss of a schema key at the same level (see
+# ``near_miss``) AND has this shape (1-32 characters, an ASCII letter first, then letters, '_' and '-', at most
+# 2 digits); every schema key fits the shape (test_config_unknown_key_names.py).
 _KEY_LIKE_RE = re.compile(r"[A-Za-z][A-Za-z0-9_-]{0,31}")
 _KEY_LIKE_MAX_DIGITS = 2
+# Near-miss: at most max(2, 20 % of the schema key's length) edits (insert, delete, replace, swap of two
+# neighbours) after lower-casing and reading '-' as '_'. A RANDOM 16+ character token is never this close to a key; a
+# printed name is at most 24 characters and has at most 4 characters that differ from a public schema key name.
+NEAR_MISS_MIN_EDITS = 2
+NEAR_MISS_SHARE_DIVISOR = 5  # 20 %
 MISSING = object()
 
 
@@ -73,8 +79,9 @@ class GlassesConfig:
     client_cert_encoding: str
     long_threshold: int
     long_answers_platform: str
-    edge_kind: str
-    edge_tls_dir: str
+    signer_socket: str
+    signer_user: str
+    signer_public_dir: str
     language_hints: tuple[str, ...] = ()  # meeting.language_hints (reserved; read by config check)
 
     @property
@@ -114,15 +121,69 @@ def may_hold_credentials(text: str) -> bool:
     return "@" in text or "://" in text
 
 
-def key_name(key: Any) -> str:
-    """How an unknown key's name appears in a message: as written only when it looks like a key name.
+def is_key_like(key: Any) -> bool:
+    """A string of identifier shape (see ``_KEY_LIKE_RE``): no escape, look-alike, invisible or line-break character."""
+    return (
+        isinstance(key, str)
+        and _KEY_LIKE_RE.fullmatch(key) is not None
+        and sum(c.isdigit() for c in key) <= _KEY_LIKE_MAX_DIGITS
+    )
 
-    Any other name (a pasted token, a URL, a line break or escape character, a very long name, a non-string key)
-    is ``<an unknown key of N characters>``: never echoed, so it can neither leak a secret nor forge a line.
+
+def _fold(name: str) -> str:
+    return name.lower().replace("-", "_")
+
+
+def edit_distance(a: str, b: str, limit: int) -> int:
+    """Edits (insert, delete, replace, swap of two neighbours) from *a* to *b*; ``limit + 1`` once it exceeds *limit*.
+
+    Optimal string alignment distance; stops as soon as a whole row exceeds *limit*, so a long name costs little.
+    """
+    if abs(len(a) - len(b)) > limit:
+        return limit + 1
+    before: list[int] = []
+    prev = list(range(len(b) + 1))
+    for i in range(1, len(a) + 1):
+        row = [i]
+        for j in range(1, len(b) + 1):
+            best = min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + (a[i - 1] != b[j - 1]))
+            if i > 1 and j > 1 and a[i - 1] == b[j - 2] and a[i - 2] == b[j - 1]:
+                best = min(best, before[j - 2] + 1)
+            row.append(best)
+        if min(row) > limit:
+            return limit + 1
+        before, prev = prev, row
+    return min(prev[-1], limit + 1)
+
+
+def near_miss(key: Any, known: Iterable[str]) -> str | None:
+    """The schema key in *known* that string *key* is a near-miss of (closest first, then alphabetical), else None.
+
+    Near-miss: at most max(``NEAR_MISS_MIN_EDITS``, len(known key) // ``NEAR_MISS_SHARE_DIVISOR``) edits after
+    lower-casing both and reading '-' as '_' (``long-Treshold`` -> ``long_threshold``).
+    """
+    if not isinstance(key, str):
+        return None
+    folded = _fold(key)
+    best: tuple[int, str] | None = None
+    for name in sorted(known):
+        limit = max(NEAR_MISS_MIN_EDITS, len(name) // NEAR_MISS_SHARE_DIVISOR)
+        dist = edit_distance(folded, _fold(name), limit)
+        if dist <= limit and (best is None or dist < best[0]):
+            best = (dist, name)
+    return best[1] if best else None
+
+
+def key_name(key: Any, close: str | None = None) -> str:
+    """How an unknown key's name appears in a message: as written only for a key-like near-miss of a schema key.
+
+    *close* is ``near_miss(key, <schema keys at that level>)``. Any other name (a pasted token, a URL, a line break or
+    escape character, a name that resembles no schema key, a non-string key) is ``<an unknown key of N characters>``:
+    no character of it is echoed, so it can neither leak a secret nor forge a line.
     """
     name = str(key)
-    if isinstance(key, str) and _KEY_LIKE_RE.fullmatch(key) and sum(c.isdigit() for c in key) <= _KEY_LIKE_MAX_DIGITS:
-        return key
+    if close is not None and is_key_like(key):
+        return name
     return f"<an unknown key of {_count(len(name), 'character')}>"
 
 

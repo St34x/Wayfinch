@@ -8,7 +8,7 @@ import logging
 
 import pytest
 
-from glasses import admin
+from glasses import admin, hermes_merge
 from glasses import config as gcfg
 
 from test_config_check_edges import EXTRA, SECRET, check_file, plat
@@ -52,7 +52,7 @@ def test_credential_values_not_in_cli_output_or_gateway_log(tmp_path, caplog, da
     code, out = check_file(tmp_path, data)
     assert code in (admin.EXIT_OK, admin.EXIT_ERRORS) and SECRET not in out, out
     caplog.set_level(logging.DEBUG, logger="glasses")
-    view = admin.platform_view(data)
+    view = hermes_merge.platform_view(data)
     assert view is not None
     assert gcfg.validate_config({"extra": view.extra}) is (code == admin.EXIT_OK)
     assert SECRET not in caplog.text

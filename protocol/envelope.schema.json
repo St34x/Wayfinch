@@ -931,7 +931,7 @@
       "additionalProperties": false
     },
     "body.audio.start": {
-      "description": "Start of a command voice clip.",
+      "description": "Start of a command voice clip (fallback path only: used when phone-direct streaming STT is not configured or not available).",
       "type": "object",
       "properties": {
         "clipId": {
@@ -948,7 +948,7 @@
       "additionalProperties": false
     },
     "body.audio.chunk": {
-      "description": "One chunk of a command voice clip (base64; the whole frame max 32 KiB).",
+      "description": "One chunk of a command voice clip (fallback path only; base64; the whole frame max 32 KiB).",
       "type": "object",
       "properties": {
         "clipId": {
@@ -965,7 +965,7 @@
       "additionalProperties": false
     },
     "body.audio.end": {
-      "description": "End of a command voice clip.",
+      "description": "End of a command voice clip (fallback path only).",
       "type": "object",
       "properties": {
         "clipId": {
@@ -1542,7 +1542,7 @@
       "additionalProperties": false
     },
     "body.meeting.audio": {
-      "description": "Phase 4 meeting audio chunk (base64; the whole frame max 32 KiB).",
+      "description": "Phase 4 meeting audio chunk (base64; the whole frame max 32 KiB). Earlier design (server relay); the planned meeting mode streams from the phone to the provider directly, so this frame is to be replaced.",
       "type": "object",
       "properties": {
         "meetingId": {

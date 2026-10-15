@@ -26,9 +26,10 @@ def test_auth_key_error_never_echoes_the_value():
 
 
 def test_auth_keys_are_case_sensitive_like_hermes():
-    # Hermes reads the lower-case keys only; an upper-case twin is inert and just warned about.
+    # Hermes reads the lower-case keys only; an upper-case twin is inert and just warned about (its name is no
+    # near-miss of a schema key, so it is not shown).
     r = gcfg.check({"ALLOWED_USERS": "*"})
-    assert r.errors == [] and r.warnings == ["ALLOWED_USERS: unknown key, ignored"]
+    assert r.errors == [] and r.warnings == ["<an unknown key of 13 characters>: unknown key, ignored"]
 
 
 @pytest.mark.parametrize("value", ["on", "enabled", "y"])

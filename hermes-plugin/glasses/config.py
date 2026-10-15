@@ -10,16 +10,18 @@ adds the rules a schema cannot express (``glasses.config_values``):
 
 * ``host`` is a loopback IP literal (hostnames, ``localhost`` included, are refused);
 * ``public_url`` is empty or a strict ``wss://`` URL, stored in normal form;
-* ``state_dir`` and ``edge.tls_dir`` are absolute paths without surrounding whitespace or control
-  characters (or empty);
+* ``state_dir``, ``signer.socket`` and ``signer.public_dir`` are absolute paths without
+  surrounding whitespace or control characters (or empty);
 * ``bridge_port`` differs from ``port``; ``home_lane`` is one of ``lanes`` unless ``lanes`` is ``[]``.
 
 Every problem is reported, one message per path: ``<path>: <problem> (got <value>) — <hint>``; callers
 print it as ``glasses.<message>``. A string value is shown only for keys the schema marks ``x-echo``
 (names, enum values, paths) and never when it contains ``@`` or ``://``; never for URL- or
 credential-capable keys (``public_url``, ``meeting.endpoint``/``provider``/``llm.*``) or for unknown or
-refused keys. An unknown key is named only when its name looks like a key name (1-32 characters, an ASCII letter
-first, then letters, ``_`` and ``-``, at most 2 digits); any other name is ``<an unknown key of N characters>``.
+refused keys. An unknown key is named only when it is a near-miss of a schema key at the same level (at most
+max(2, 20 % of that key's length) edits, case and ``-``/``_`` ignored; the message adds ``did you mean <key>?``)
+and its name looks like a key name (1-32 characters, an ASCII letter first, then letters, ``_`` and ``-``, at most
+2 digits); any other name is ``<an unknown key of N characters>``.
 Patterns are anchored and guarded against a trailing newline (Python ``$``); code uses ``re.fullmatch`` only.
 
 Unknown keys are reported as warnings, not errors -- except the access-control keys the Hermes

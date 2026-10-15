@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Unknown key names in config check and the gateway log: only key-like names are shown as written.
+"""Unknown key names in config check and the gateway log: only key-like near-misses of a schema key are shown.
 
-A key-like name has 1-32 characters: an ASCII letter first, then only letters, '_' and '-', with at most 2 digits.
-Every other unknown name (a pasted token, a URL, a very long name, one with a line break or an escape character,
-a non-string key) is shown as ``<an unknown key of N characters>`` in the warning, which still appears; the
-did-you-mean hint names only the known key. Key-like names (typos such as ``colour``) are still named.
+A name is shown as written only when (a) it is a near-miss of a schema key at the same level (at most
+max(2, 20 % of that key's length) edits after lower-casing and reading '-' as '_'), which also gives the
+did-you-mean hint, and (b) it is key-like: 1-32 characters, an ASCII letter first, then only letters, '_' and '-',
+with at most 2 digits. Every other unknown name (a pasted token, a URL, a word that resembles no key, a very long
+name, one with a line break or an escape character, a non-string key) is shown as
+``<an unknown key of N characters>`` in the warning, which still appears; a hint then names only the known key.
 """
 
 from __future__ import annotations
@@ -16,7 +18,7 @@ from typing import Any
 import pytest
 
 from glasses import config as gcfg
-from glasses.config_core import key_name
+from glasses.config_core import is_key_like, key_name
 
 SECRET = "S3cr3tValue"
 BASE = {"host": "127.0.0.1", "port": 8765, "bridge_port": 8766}
@@ -36,12 +38,12 @@ def placeholder(key: object) -> str:
         ({f"wss://u:{SECRET}@h.example.com/ws": 1}, "", f"wss://u:{SECRET}@h.example.com/ws"),
         ({f"user:{SECRET}@host": 1}, "", f"user:{SECRET}@host"),
         ({f"https://{SECRET}" * 40: 1}, "", f"https://{SECRET}" * 40),
-        ({"edge": {"kind": "nginx", f"https://{SECRET}.example.com": 1}}, "edge.", f"https://{SECRET}.example.com"),
+        ({"signer": {"user": "", f"https://{SECRET}.example.com": 1}}, "signer.", f"https://{SECRET}.example.com"),
         ({"meeting": {"llm": {f"u:{SECRET}@x": 1}}}, "meeting.llm.", f"u:{SECRET}@x"),
         ({"port@" + SECRET: 1}, "", "port@" + SECRET),
         ({SECRET + "9": 1}, "", SECRET + "9"),
     ],
-    ids=["url", "user-pass", "very-long", "nested-edge", "nested-meeting-llm", "near-miss", "three-digits"],
+    ids=["url", "user-pass", "very-long", "nested-signer", "nested-meeting-llm", "near-miss", "three-digits"],
 )
 def test_credential_looking_unknown_key_is_warned_with_a_placeholder(
     extra: dict[str, object], prefix: str, key: str
@@ -110,17 +112,26 @@ def test_did_you_mean_names_only_the_known_key() -> None:
 @pytest.mark.parametrize(
     ("key", "expected"),
     [
-        ("colour", "colour: unknown key, ignored"),
         ("hots", "hots: unknown key, ignored — did you mean host?"),
         ("long-treshold", "long-treshold: unknown key, ignored — did you mean long_threshold?"),
-        ("Colour", "Colour: unknown key, ignored"),
-        ("v2_key9", "v2_key9: unknown key, ignored"),
-        ("a" * 32, "a" * 32 + ": unknown key, ignored"),
-        ("x", "x: unknown key, ignored"),
+        ("Host", "Host: unknown key, ignored — did you mean host?"),
+        ("BRIDGE-PORT", "BRIDGE-PORT: unknown key, ignored — did you mean bridge_port?"),
+        ("clientcertheader", "clientcertheader: unknown key, ignored — did you mean client_cert_header?"),
+        ("client_cert_encodnig", "client_cert_encodnig: unknown key, ignored — did you mean client_cert_encoding?"),
+        ("port2", "port2: unknown key, ignored — did you mean port?"),
     ],
 )
-def test_key_like_unknown_key_is_named_as_written(key: str, expected: str) -> None:
+def test_key_like_near_miss_is_named_with_a_hint(key: str, expected: str) -> None:
     assert gcfg.check({**BASE, key: 1}).warnings == [expected]
+
+
+# A 20-character letter+digit token with at most 2 digits: key-like, so the shape rule alone would show it.
+KEY_LIKE_TOKEN = "AbcdEfgh" * 2 + "Qr12"
+
+
+@pytest.mark.parametrize("key", ["colour", "Colour", "v2_key9", "a" * 32, "x", "api_key", "threshold", KEY_LIKE_TOKEN])
+def test_key_like_name_that_is_no_near_miss_is_hidden_without_hint(key: str) -> None:
+    assert gcfg.check({**BASE, key: 1}).warnings == [f"{placeholder(key)}: unknown key, ignored"]
 
 
 def _schema_keys(node: Mapping[str, Any]) -> Iterator[str]:
@@ -132,19 +143,20 @@ def _schema_keys(node: Mapping[str, Any]) -> Iterator[str]:
 def test_every_schema_key_is_key_like() -> None:
     names = set(_schema_keys(gcfg.schema()))
     assert "client_cert_encoding" in names and len(names) > 10
-    assert [n for n in sorted(names) if key_name(n) != n] == []
+    assert [n for n in sorted(names) if not is_key_like(n) or key_name(n, n) != n] == []
 
 
 def test_gateway_log_never_names_a_credential_looking_key(caplog: pytest.LogCaptureFixture) -> None:
-    url_key, edge_key = f"https://u:{SECRET}@h", f"u:{SECRET}@h"
-    extra = {**BASE, url_key: 1, "edge": {"kind": "nginx", edge_key: 2}, "colour": 3, FAKE_GHP: 4}
+    url_key, nested_key = f"https://u:{SECRET}@h", f"u:{SECRET}@h"
+    extra = {**BASE, url_key: 1, "signer": {"user": "", nested_key: 2}, "colour": 3, FAKE_GHP: 4, "hots": 5}
     with caplog.at_level(logging.DEBUG):
         assert gcfg.validate_config({"extra": extra}) is True
     text = caplog.text
-    assert SECRET not in text and FAKE_GHP not in text, text
+    assert SECRET not in text and FAKE_GHP not in text and "colour" not in text, text
     assert f"glasses.{placeholder(url_key)}: unknown key" in text, text
-    assert f"glasses.edge.{placeholder(edge_key)}: unknown key" in text, text
-    assert "glasses.colour: unknown key, ignored" in text, text
+    assert f"glasses.signer.{placeholder(nested_key)}: unknown key" in text, text
+    assert f"glasses.{placeholder('colour')}: unknown key, ignored" in text, text
+    assert "glasses.hots: unknown key, ignored — did you mean host?" in text, text
 
 
 def test_unknown_key_name_with_a_line_break_cannot_forge_an_output_line() -> None:

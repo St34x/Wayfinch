@@ -39,7 +39,11 @@ def cfg(**extra):
 def facts(routes=None, served=("default", "work"), gate=(), **profiles):
     profiles = {"default": GOOD, "work": GOOD, **profiles}
     return admin.HermesFacts(
-        served=frozenset(served), routes=routes or {"work": "work"}, profiles=profiles, gate_problems=tuple(gate)
+        served=frozenset(served),
+        routes=routes or {"work": "work"},
+        profiles=profiles,
+        gate_problems=tuple(gate),
+        known_toolsets=frozenset({"web", "todo", "terminal"}),
     )
 
 
@@ -134,7 +138,7 @@ def test_unrouted_lane_goes_to_the_default_profile(home):
     [
         ({"stt_language": "en"}, 'stt.language is "en"'),
         ({"glasses_tools": frozenset({"web", "terminal"})}, "missing on glasses: todo; only on glasses: terminal"),
-        ({"clarify_timeout": 3600}, "clarify timeout resolves to 3600"),
+        ({"clarify_timeout": 3600}, "clarify timeout resolves to a positive number"),
         ({"approvals_timeout": 0}, "approvals.timeout resolves to 0"),
     ],
 )
@@ -312,7 +316,7 @@ def test_live_against_real_hermes_in_a_scratch_home(mode):
         "error: allow-all gate: profile work: GLASSES_ALLOW_ALL_USERS is set",
         "error: glasses.lanes: lane 'ghost' is routed to profile 'ghost', which this gateway does not serve",
         "error: profile work: approvals.timeout resolves to 0",
-        "error: profile work: clarify timeout resolves to 3600 s",
+        "error: profile work: clarify timeout resolves to a positive number of seconds",
         'error: profile work: stt.language is "en" but meeting.language_hints has fr',
         "error: profile work: the glasses tool set differs from telegram",
     ]

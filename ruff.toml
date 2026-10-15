@@ -49,9 +49,6 @@ known-local-folder = ["conftest", "test_*"]
 # T1.130
 "hermes-plugin/tests/test_registry_corrupt_store.py" = ["BLE001"]  # T1.130
 
-# T1.15
-"hermes-plugin/glasses/admin.py" = ["BLE001"]  # T1.15
-
 # T1.55
 "tools/test-hermes/glasses_min/adapter.py" = ["BLE001", "PLR0913", "PLR0917", "SIM115", "UP031"]  # T1.55
 

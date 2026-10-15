@@ -12,7 +12,8 @@ frames against this schema; golden fixtures live in `fixtures/` (T1.03).
 - `envelope.schema.json` — the contract (JSON Schema draft 2020-12): the envelope, the `type` enum and one
   `$defs/body.<type>` per frame type.
 - `fixtures/` — golden frames (`valid/`, `invalid/`, `codec-valid/`, `codec-invalid/`) both stacks test against.
-- This document: the field, message-type, close-code and error-code tables below, the delivery rule, and the
+- This document: the field, message-type, close-code and error-code tables below, the delivery rule, the HTTP
+  `/enroll` request and answers (the one call outside the WebSocket), and the
   limits table (UTF-8 byte limits per field) in *Limits and validation notes*. Tests and `tools/codegen/` parse the
   message-type and limits tables, so their row format is part of the API.
 
@@ -83,6 +84,14 @@ No other top-level field is allowed. Field names in the design marked `?` are op
 | `error` | both | `code` (snake_case ≤64), `message` (≤500 B; never secrets or message bodies) |
 
 `config.change` is **not** a frame type: configuration changes travel as `skill.call` of built-in `config.*` skills.
+
+**Voice path.** `audio.start` / `audio.chunk` / `audio.end` carry a command clip only on the **fallback** path, used
+when streaming speech-to-text is not configured on the server or not available; the plugin then hands the clip to the
+gateway's configured STT provider. The default (planned) path sends no audio to the server: the phone streams the
+command directly to the streaming STT provider with a short-lived token minted by the plugin, and sends only the
+final text as `msg.in`. The frames that request and deliver that token are planned additions to this schema.
+`meeting.audio` belongs to an earlier meeting design in which the server relayed the audio; in the planned meeting
+mode the phone streams to the provider directly and sends transcripts, and that frame is to be replaced.
 
 ### Card states
 
@@ -218,6 +227,41 @@ Other rules:
   of the answer (cut at 4096 B on a code-point boundary) and the phone shows `truncated — full text in <channel>`;
   absent means `fullText` is complete or absent. Producers omit `truncated` rather than send `false`; consumers
   accept both (absent and `false` both mean complete).
+
+## HTTP `/enroll`
+
+Enrolment is the one HTTP call of this protocol. It happens before the device has a certificate, so it is not a
+WebSocket frame and carries no envelope. The phone sends it to the plugin's `/enroll` route; the plugin checks it and
+relays it to the device-CA signer, which owns the enrolment window, the one-time code, the proof check and the
+issuance. Status: the relay is built (`hermes-plugin/glasses/enroll.py`); the HTTP server that mounts it is planned
+(T1.07), and so are the phone's proof of possession (T1.22) and enrolment client (T1.23).
+
+| part | rule |
+|---|---|
+| request | `POST /enroll`; the phone sends no other method (the server answers any other one with `405`) |
+| `Content-Type` | `application/json` |
+| body cap | at most `4096` bytes; more is answered `413` |
+| body | one strict JSON object: UTF-8, no repeated key, no `NaN`/`Infinity`, exactly the keys below, every value a string, no other key (a name, lanes or device info are refused) |
+
+| key | value |
+|---|---|
+| `spki` | the SPKI DER of the device's public key (1..256 bytes) as canonical padded base64: standard alphabet, `=` padding, no line breaks |
+| `code` | the 22-character base64url code from the enrolment payload, as received |
+| `signature` | the DER ECDSA P-256 / SHA-256 signature (1..80 bytes), canonical padded base64, proving possession of the key over `b"wayfinch-enroll-v1\x00"` ‖ `code` (ASCII) ‖ the SPKI DER |
+
+The relay forwards `signature` to the signer as `sig` (the signer's field name; the phone never sends `sig`). A value
+in any other encoding is refused with `400`.
+
+| status | meaning |
+|---|---|
+| `200` | JSON `{"cert", "token", "deviceId"}` with `Cache-Control: no-store`. The answer can take up to 340 s: the signer holds the call until the operator confirms |
+| `400` | one generic answer for any bad request: wrong content type, a body or field that is not as above, a bad proof, a key that is already enrolled |
+| `404` | refused (for example no enrolment window is open): the same bytes as an unknown path |
+| `413` | body over the cap |
+| `429` | rate limited (6 a minute in total) or two enrolments already running |
+| `503` | the signer is unavailable, or any other failure |
+
+Bodies of non-`200` answers are fixed texts. The phone acts only on the status code and, on `200`, on the three keys.
 
 ## Tests
 

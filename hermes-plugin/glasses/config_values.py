@@ -6,14 +6,14 @@ A pure core module (``core-purity`` in ``.importlinter``; ``tools/quality/check_
 
 * ``host`` is a loopback IP literal (hostnames, ``localhost`` included, are refused);
 * ``public_url`` is empty or a strict ``wss://`` URL, stored in normal form;
-* ``state_dir`` and ``edge.tls_dir`` are absolute paths without surrounding whitespace or control
-  characters (or empty);
-* keys the schema does not declare are dropped with a warning (``prune``).
+* ``state_dir``, ``signer.socket`` and ``signer.public_dir`` are absolute paths without
+  surrounding whitespace or control characters (or empty); ``signer.socket`` at most 107 bytes in UTF-8;
+* keys the schema does not declare are dropped with a warning (``prune``); the warning names the key only when it
+  is a key-like near-miss of a key at the same level, with a did-you-mean hint.
 """
 
 from __future__ import annotations
 
-import difflib
 import ipaddress
 import re
 from collections.abc import Callable, Iterable, Mapping
@@ -29,6 +29,7 @@ from .config_core import (
     key_name,
     lookup,
     message,
+    near_miss,
     relation_errors,
     schema_node,
     strip_lane_prefix,
@@ -65,6 +66,11 @@ def _is_clean_str(value: Any) -> bool:
 def _empty_or_abs_path(value: Any) -> bool:
     """Empty, or a clean absolute POSIX path: for a ``str`` this is exactly ``posixpath.isabs`` (a leading ``/``)."""
     return value in (None, "") or (_is_clean_str(value) and value.startswith("/"))
+
+
+def _empty_or_socket_path(value: Any) -> bool:
+    """``_empty_or_abs_path`` that also fits an ``AF_UNIX`` address: at most 107 bytes in UTF-8."""
+    return value in (None, "") or (_empty_or_abs_path(value) and len(value.encode("utf-8", "surrogatepass")) <= 107)
 
 
 def _public_host(hostname: str) -> str | None:
@@ -124,7 +130,8 @@ SEMANTIC_RULES: tuple[tuple[tuple[str, ...], Callable[[Any], bool]], ...] = (
     (("host",), is_loopback_host),
     (("public_url",), _valid_public_url),
     (("state_dir",), _empty_or_abs_path),
-    (("edge", "tls_dir"), _empty_or_abs_path),
+    (("signer", "socket"), _empty_or_socket_path),
+    (("signer", "public_dir"), _empty_or_abs_path),
 )
 
 
@@ -141,9 +148,9 @@ def semantic_errors(own: Mapping[str, Any], failed: set[str], schema: Mapping[st
 
 
 def _unknown(prefix: str, key: Any, known: Iterable[str]) -> str:
-    text = f"{prefix}{key_name(key)}: unknown key, ignored"
-    close = difflib.get_close_matches(key, list(known), n=1) if isinstance(key, str) else []
-    return f"{text} — did you mean {prefix}{close[0]}?" if close else text
+    close = near_miss(key, known)
+    text = f"{prefix}{key_name(key, close)}: unknown key, ignored"
+    return f"{text} — did you mean {prefix}{close}?" if close else text
 
 
 def prune(raw: Mapping[Any, Any], node: Mapping[str, Any], prefix: str, warnings: list[str]) -> dict[Any, Any]:
@@ -165,7 +172,7 @@ def build(own: Mapping[str, Any]) -> GlassesConfig:
     """The config value of a valid *own* mapping (pruned, no errors), defaults filled in."""
     v = {**DEFAULTS, **own}
     long_answers = {**DEFAULTS["long_answers"], **(v["long_answers"] or {})}
-    edge = {**DEFAULTS["edge"], **(v["edge"] or {})}
+    signer = {**DEFAULTS["signer"], **(v["signer"] or {})}
     meeting = v["meeting"] or {}
     return GlassesConfig(
         host=v["host"],
@@ -179,7 +186,8 @@ def build(own: Mapping[str, Any]) -> GlassesConfig:
         client_cert_encoding=v["client_cert_encoding"],
         long_threshold=v["long_threshold"],
         long_answers_platform=long_answers["platform"],
-        edge_kind=edge["kind"],
-        edge_tls_dir=edge["tls_dir"] or "",
+        signer_socket=signer["socket"] or "",
+        signer_user=signer["user"] or "",
+        signer_public_dir=signer["public_dir"] or "",
         language_hints=tuple(meeting.get("language_hints") or ()),
     )

@@ -3,7 +3,7 @@
   "$id": "urn:wayfinch:plugin:glasses:config:v1",
   "$comment": "SPDX-License-Identifier: Apache-2.0",
   "title": "glasses platform settings",
-  "description": "Settings of the glasses platform plugin under gateway.platforms.glasses.extra in the Hermes config. glasses/config.py validates with this schema (types, ranges, patterns) plus the rules a schema cannot express (loopback host, public_url normal form, absolute paths, port != bridge_port, home_lane in lanes). Keys the Hermes gateway itself injects are not ours and are skipped; access-control keys Hermes would act on are refused; any other unknown key is a warning. An unknown key is named in its message only when its name looks like a key name (1-32 characters, an ASCII letter first, then letters, '_' and '-', at most 2 digits); any other name is shown as <an unknown key of N characters> (it could be a pasted secret or forge an output line). x-error / x-errors / x-hint are the user-facing messages ('glasses.<path>: <x-error> (got <value>) — <x-hint>'); a string value is shown only when x-echo is true and it contains neither '@' nor '://' (it could carry credentials); URL- and credential-capable keys (public_url, meeting.endpoint, meeting.provider, meeting.llm.*) are never echoed. x-status: planned marks a key whose feature is not built yet: it is accepted and validated but has no effect.",
+  "description": "Settings of the glasses platform plugin under gateway.platforms.glasses.extra in the Hermes config. glasses/config.py validates with this schema (types, ranges, patterns) plus the rules a schema cannot express (loopback host, public_url normal form, absolute paths, port != bridge_port, home_lane in lanes). Keys the Hermes gateway itself injects are not ours and are skipped; access-control keys Hermes would act on are refused; any other unknown key is a warning. An unknown key that is a near-miss of a key at the same level (at most max(2, 20 % of that key's length) edits after lower-casing and reading '-' as '_') gets a 'did you mean <key>?' hint, and its name is shown only then and only when it looks like a key name (1-32 characters, an ASCII letter first, then letters, '_' and '-', at most 2 digits); any other name is shown as <an unknown key of N characters> (it could be a pasted secret or forge an output line). x-error / x-errors / x-hint are the user-facing messages ('glasses.<path>: <x-error> (got <value>) — <x-hint>'); a string value is shown only when x-echo is true and it contains neither '@' nor '://' (it could carry credentials); URL- and credential-capable keys (public_url, meeting.endpoint, meeting.provider, meeting.llm.*) are never echoed. x-status: planned marks a key whose feature is not built yet: it is accepted and validated but has no effect.",
   "type": "object",
   "additionalProperties": false,
   "x-error": "must be a mapping",
@@ -43,8 +43,7 @@
       "x-hint": "a second free loopback port, e.g. 8766"
     },
     "state_dir": {
-      "description": "Absolute directory for the plugin state (device registry, device CA, outbox); empty or null = $HERMES_HOME/glasses.",
-      "x-status": "planned",
+      "description": "Absolute directory for the plugin state; empty or null = $HERMES_HOME/glasses. Used today by glasses-admin crl --check (its rollback record crl-seen.json, the highest CRL number seen per CA), config check --live and glasses-admin revoke (it connects to the plugin's admin socket admin.sock here; the server is planned); the plugin keeps no CA key and no CRL here; the device registry and outbox (planned) will live here too.",
       "type": [
         "string",
         "null"
@@ -164,31 +163,43 @@
       "x-error": "must be a mapping with the key platform",
       "x-hint": "e.g. long_answers: {platform: telegram}"
     },
-    "edge": {
-      "description": "Your TLS edge, for glasses-admin hints.",
-      "x-status": "planned",
+    "signer": {
+      "description": "The device-CA signer: a separate local service (planned, built outside this repository) that the plugin asks to issue and revoke device certificates. Used today: socket and user by glasses-admin crl and glasses-admin revoke, public_dir by glasses-admin crl --check.",
       "type": [
         "object",
         "null"
       ],
       "additionalProperties": false,
       "properties": {
-        "kind": {
-          "x-status": "planned",
-          "description": "Software of your TLS edge; selects the reload hint glasses-admin prints.",
-          "enum": [
-            "nginx",
-            "caddy",
-            "other"
+        "socket": {
+          "description": "Absolute path of the signer's unix socket, at most 107 bytes UTF-8 (the AF_UNIX limit, not characters); the plugin refuses it unless it is a socket owned by signer.user; empty = unset.",
+          "type": [
+            "string",
+            "null"
           ],
-          "default": "nginx",
-          "x-error": "must be one of nginx, caddy, other",
-          "x-hint": "selects the reload hint glasses-admin prints",
+          "maxLength": 107,
+          "default": "",
+          "x-error": "must be an absolute path of at most 107 bytes (UTF-8) without surrounding whitespace or control characters, or empty",
+          "x-hint": "e.g. /run/device-signer/signer.sock",
           "x-echo": true
         },
-        "tls_dir": {
-          "description": "Absolute directory the edge reads the device CA + CRL from; empty = unset.",
-          "x-status": "planned",
+        "user": {
+          "description": "System user the signer runs as: the owner of its socket and the peer uid the plugin requires; not root and not the plugin's own user; empty = unset.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^([a-z_][a-z0-9_-]{0,31})?$",
+          "not": {
+            "pattern": "[\\n\\r\\u0085\\u2028\\u2029]"
+          },
+          "default": "",
+          "x-error": "must be a user name (lower-case letters, digits, _ and -, at most 32 characters), or empty",
+          "x-hint": "e.g. device-signer",
+          "x-echo": true
+        },
+        "public_dir": {
+          "description": "Absolute directory where the signer publishes device-ca.pem, devices-crl.pem and devices.json; glasses-admin crl --check reads the first two; empty = unset.",
           "type": [
             "string",
             "null"
@@ -196,16 +207,17 @@
           "maxLength": 4096,
           "default": "",
           "x-error": "must be an absolute path without surrounding whitespace or control characters, or empty",
-          "x-hint": "e.g. /etc/nginx/glasses",
+          "x-hint": "e.g. /var/lib/device-signer/public",
           "x-echo": true
         }
       },
       "default": {
-        "kind": "nginx",
-        "tls_dir": ""
+        "socket": "",
+        "user": "",
+        "public_dir": ""
       },
-      "x-error": "must be a mapping with the keys kind, tls_dir",
-      "x-hint": "e.g. edge: {kind: nginx, tls_dir: /etc/nginx/glasses}"
+      "x-error": "must be a mapping with the keys socket, user, public_dir",
+      "x-hint": "e.g. signer: {socket: /run/device-signer/signer.sock, user: device-signer}"
     },
     "meeting": {
       "description": "Settings of meeting mode. Off unless enabled here and per device.",
@@ -231,7 +243,7 @@
           ],
           "default": "soniox",
           "x-error": "must be one of soniox, deepgram, speechmatics",
-          "x-hint": "the key comes from the profile .env under the provider's variable name"
+          "x-hint": "the key stays on the server: the plugin reads it from the provider's environment variable in the gateway environment (supply it from a secret manager); the phone only gets short-lived tokens"
         },
         "endpoint": {
           "description": "Provider host (region); empty = the provider default.",

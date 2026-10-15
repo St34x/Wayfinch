@@ -9,8 +9,9 @@ Module list `MODULES_FILE` (tracked; `#` comment lines), one entry per line, fie
 <dir> = relative path of lower-case segments. Any other line, a duplicate dir or an empty list -> exit 2.
 <doc> §<n> = the public rule allowing the override: a tracked file outside any dot-directory with a heading
 `<n>.` (e.g. `ENGINEERING.md §1`); a ref that does not resolve is a finding.
-README (tracked regular file): before its first `##` only blank lines, one-line `<!-- -->` comments and one `# `
-title; the first three `##` sections are exactly SECTIONS in order, none empty (blank lines, comments, thematic
+README (tracked regular file): before its first `##` only blank lines, one-line `<!-- -->` comments (a line of whole
+comments, each closed at its first `-->`; `--!>`, `<!-->` or `<!--->` make it text) and one `# ` title; the first
+three `##` sections are exactly SECTIONS in order, none empty (blank lines, comments, thematic
 breaks and fence lines are no content); without an override no other `##` section and at most MAX_LINES lines,
 with one more than MAX_LINES (a stale override fails). Setext headings are refused; headings inside fenced code
 blocks are skipped.
@@ -42,7 +43,10 @@ _REF = re.compile(r"(?P<doc>[A-Za-z0-9_-][A-Za-z0-9_.-]*(?:/[A-Za-z0-9_-][A-Za-z
 _HEADING = re.compile(r" {0,3}(#{1,6})(?:[ \t]+(.*?))?[ \t]*")
 _FENCE = re.compile(r" {0,3}(`{3,}|~{3,})")
 _SETEXT = re.compile(r" {0,3}(?:=+|-+)[ \t]*")
-_COMMENT = re.compile(r"[ \t]*<!--.*-->[ \t]*")
+COMMENT_OPEN = "<!--"
+COMMENT_CLOSE = "-->"  # GitHub's HTML block (CommonMark type 2) ends only at this
+COMMENT_BANG_CLOSE = "--!>"  # HTML parsers also end a comment here: a comment closed by it is text (fail closed)
+COMMENT_ABRUPT = (">", "->")  # `<!-->` / `<!--->`: HTML parsers end the comment at once, what follows is shown
 _RULE = re.compile(r" {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*")
 NO_CONTENT = frozenset({"blank", "comment", "fence", "rule"})
 
@@ -124,10 +128,47 @@ def parse_modules(text: str) -> list[Entry]:
     return entries
 
 
+def _skip_blanks(text: str, at: int) -> int:
+    """Index of the first character at or after `at` that is not a space or tab."""
+    while at < len(text) and text[at] in " \t":
+        at += 1
+    return at
+
+
+def _comment_end(text: str, start: int) -> int:
+    """Index just past the `-->` closing the comment whose body starts at `start`; -1 when the comment does not
+    close cleanly there: no `-->`, an abrupt `<!-->`/`<!--->` (HTML shows what follows) or a `--!>` before the
+    `-->` (HTML ends the comment there, GitHub's block parser only at `-->`). Searches only from `start` on."""
+    if text.startswith(COMMENT_ABRUPT, start):
+        return -1
+    close = text.find(COMMENT_CLOSE, start)
+    if close < 0 or text.find(COMMENT_BANG_CLOSE, start, close) >= 0:
+        return -1
+    return close + len(COMMENT_CLOSE)
+
+
+def is_comment_line(line: str) -> bool:
+    """Only spaces/tabs and whole HTML comments, each closed cleanly at its first `-->` (see `_comment_end`), so no
+    text between or after comments passes as a comment and anything an HTML parser or GitHub would read differently
+    is text. One index walk, every search starts at the current position: linear in the line length. Scanned by
+    hand: no regex parses HTML here."""
+    at = _skip_blanks(line, 0)
+    if at == len(line):
+        return False
+    while at < len(line):
+        if not line.startswith(COMMENT_OPEN, at):
+            return False
+        at = _comment_end(line, at + len(COMMENT_OPEN))
+        if at < 0:
+            return False
+        at = _skip_blanks(line, at)
+    return True
+
+
 def _kind(line: str, previous: str) -> Line:
     if not line.strip():
         return Line("blank")
-    if _COMMENT.fullmatch(line):
+    if is_comment_line(line):
         return Line("comment")
     heading = _HEADING.fullmatch(line)
     if heading:

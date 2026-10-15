@@ -90,19 +90,39 @@ class FakeHermes:
 
     def modules(self) -> dict[str, ModuleType | SimpleNamespace]:
         mods: dict[str, ModuleType | SimpleNamespace] = dict(_fake_hermes_modules())
-        mods["gateway.config"].load_gateway_config = lambda: SimpleNamespace(multiplex_profiles=True, profile_routes=[])
+        mods["gateway.config"].GatewayConfig = SimpleNamespace(
+            from_dict=lambda _data: SimpleNamespace(multiplex_profiles=True, profile_routes=[])
+        )
+        mods["gateway.config_loader"] = SimpleNamespace(
+            load_legacy_gateway_json=lambda _home: {},
+            read_yaml_layers=lambda _home: {},
+            bridge_toplevel_keys=lambda _layers, _gateway, _data: None,
+        )
         mods["gateway.platforms._shared"] = SimpleNamespace(platform_gate_env=self.platform_gate_env)
         mods["gateway.profile_routing"] = SimpleNamespace(
             match_profile_route=lambda _routes, _platform, chat_id: (
                 SimpleNamespace(profile="work") if chat_id.endswith(":work") else None
             )
         )
-        mods["agent.secret_scope"] = SimpleNamespace(build_profile_secret_scope=self.build_profile_secret_scope)
+        mods["agent.secret_scope"] = SimpleNamespace(
+            build_profile_secret_scope=self.build_profile_secret_scope, load_env_file=lambda _path: {}
+        )
         mods["hermes_cli.profiles"] = SimpleNamespace(profiles_to_serve=self.profiles_to_serve)
-        mods["hermes_cli.config"] = SimpleNamespace(load_config_readonly=lambda: {"stt": {"provider": "local"}})
-        mods["hermes_cli.tools_config"] = SimpleNamespace(_get_platform_tools=lambda _config, _platform: {"web"})
+        mods["hermes_cli.config"] = SimpleNamespace(
+            DEFAULT_CONFIG={"stt": {"provider": "local"}},
+            _canonicalize_config=lambda config: config,
+            _deep_merge=lambda base, override: {**base, **override},
+            _expand_env_vars=lambda config: config,
+            _merge_managed_overlay=lambda config: (config, {}),
+        )
+        mods["hermes_cli.tools_config"] = SimpleNamespace(
+            _get_platform_tools=lambda _config, _platform: {"web"}, CONFIGURABLE_TOOLSETS=[("web", "Web", "")]
+        )
+        mods["toolsets"] = SimpleNamespace(TOOLSETS={"web": {}})
         mods["hermes_constants"] = SimpleNamespace(
-            set_hermes_home_override=lambda home: home, reset_hermes_home_override=lambda token: None
+            get_hermes_home=lambda: self.home,
+            set_hermes_home_override=lambda home: home,
+            reset_hermes_home_override=lambda token: None,
         )
         mods["tools.clarify_gateway"] = SimpleNamespace(resolve_clarify_timeout=lambda _config: 0)
         mods["tools.transcription_common"] = SimpleNamespace(LOCAL_STT_LANGUAGE_ENV="GLASSES_TEST_UNSET_STT_LANGUAGE")

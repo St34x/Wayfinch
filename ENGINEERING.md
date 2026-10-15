@@ -111,7 +111,7 @@ an external signature (a fake of a framework API) may exceed the parameter limit
   per follow-up task) is exempt until that task types it and deletes the block. Today this is one test-only tool (the
   minimal test platform, `tools/test-hermes/glasses_min`); `mypy.ini` is the current list, and new modules never get
   a block. Hermes packages are not installed in the dev venv, so every Hermes import is untyped (`Any`,
-  `ignore_missing_imports` in `mypy.ini`); in the plugin, only `adapter.py`, `gate.py` and `hermes_facts.py` import
+  `ignore_missing_imports` in `mypy.ini`); in the plugin, only `adapter.py`, `gate.py`, `hermes_facts.py` and `hermes_env.py` import
   Hermes. Small `typing.Protocol`s or typed records type the Hermes objects of the plugin's entry points
   (`register`'s plugin context, the adapter's platform config and inbound event, the gate's Hermes readers). Values
   whose shape the plugin checks itself at run time still come in as `Any` or `object`: the platform config in the
@@ -158,9 +158,9 @@ an external signature (a fake of a framework API) may exceed the parameter limit
 ## 8. Dependencies
 
 - Minimal: the standard library first. The plugin installs nothing: its runtime dependencies are only what the Hermes
-  venv provides (`docs/dependencies.md`). Today the plugin code imports `jsonschema` (config validation) and `PyYAML`
-  (operator CLI only); its requirement probe also checks for `aiohttp` and `cryptography`, which the planned transport
-  and device CA will use. A base Hermes install does not provide all of them: `cryptography` is a core dependency of
+  venv provides (`docs/dependencies.md`). Today the plugin code imports `jsonschema` (config validation), `PyYAML`
+  (operator CLI only), `cryptography` (parsing and verifying the signer's published CA and CRL bundles, `crl_check.py`, imported lazily by
+  `crl --check` so that `config check` and `crl` run without it) and `aiohttp` (the `/enroll` relay `enroll.py`, not mounted until the planned transport, T1.07). A base Hermes install does not provide all of them: `cryptography` is a core dependency of
   the pinned Hermes, but `aiohttp` comes only with Hermes' messaging extras (for example `messaging`), `jsonschema`
   only with its `mcp` extra, and `PyYAML` only through extras that pull it in.
 - **Supported Python** (decision): the plugin supports exactly the range Hermes declares in `requires-python`,

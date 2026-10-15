@@ -138,7 +138,7 @@ def test_unknown_keys_warn_without_value_and_exit_0(tmp_path):
     code, out, err = cli(write(tmp_path, mutate), tmp_path)
     assert code == admin.EXIT_OK, out
     assert "warning: glasses.long_treshold: unknown key, ignored — did you mean long_threshold?" in out
-    assert "warning: glasses.meeting.api_key: unknown key, ignored" in out
+    assert "warning: glasses.meeting.<an unknown key of 7 characters>: unknown key, ignored" in out
     assert SECRET not in out + err
 
 

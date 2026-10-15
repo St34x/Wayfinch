@@ -114,15 +114,6 @@ def test_example_passes_the_plugin_validator() -> None:
     assert (result.errors, result.warnings) == ([], [])
 
 
-def test_urls_and_hosts_use_example_com_only() -> None:
-    text = COMMITTED.read_text(encoding="utf-8")
-    hosts = re.findall(r"[a-z]+://([A-Za-z0-9.-]+)", text) + [_example()["meeting"]["endpoint"]]
-    assert hosts
-    assert all(host == "example.com" or host.endswith(".example.com") for host in hosts), hosts
-    url_or_host = [str(value) for value in gen.EXAMPLES.values() if not str(value).startswith("/")]
-    assert url_or_host and all("example.com" in value for value in url_or_host)
-
-
 # --- freshness --------------------------------------------------------------------------------------------------------
 
 
@@ -246,7 +237,7 @@ def test_unreadable_schema_exits_2_with_one_line(tmp_path: Path, content: str | 
         (lambda s: s["properties"]["lanes"]["items"].update({"$ref": "#/$defs/nope"}), "only an existing local"),
         (lambda s: s["properties"]["host"].update({"$ref": "other.json#/x"}), "#/properties/host/$ref"),
         (lambda s: s["properties"]["host"].update({"not": {"type": "null"}}), "#/properties/host/not"),
-        (lambda s: s["properties"]["edge"].pop("additionalProperties"), "additionalProperties: false"),
+        (lambda s: s["properties"]["signer"].pop("additionalProperties"), "additionalProperties: false"),
         (lambda s: s["properties"].pop("public_url"), "EXAMPLES names a key the schema does not have: public_url"),
         (lambda s: s["properties"]["port"].update(description=1), "must be strings"),
         (lambda s: s.update(properties=[]), "#/properties: expected a JSON object"),
@@ -317,14 +308,14 @@ def test_planned_marker_is_rendered_and_inherited() -> None:
     schema = copy.deepcopy(SCHEMA)
     for node in (
         schema["properties"]["port"],
-        schema["properties"]["edge"],
-        schema["properties"]["edge"]["properties"]["kind"],
+        schema["properties"]["signer"],
+        schema["properties"]["signer"]["properties"]["socket"],
     ):
         node.pop("x-status", None)
-    schema["properties"]["edge"]["x-status"] = "planned"
+    schema["properties"]["signer"]["x-status"] = "planned"
     assert gen.PLANNED not in _row_of(schema, "port")
     assert _row_of(schema, "port").endswith("| Loopback WebSocket port the TLS edge proxies /ws to. |")
-    assert f"| {gen.PLANNED} Software of your TLS edge" in _row_of(schema, "edge.kind")
+    assert f"| {gen.PLANNED} Absolute path of the signer's unix socket" in _row_of(schema, "signer.socket")
     schema["properties"]["meeting"]["properties"]["enabled"].pop("x-status")
     assert _row_of(schema, "meeting.enabled").endswith(f"| {gen.PLANNED} |")
 

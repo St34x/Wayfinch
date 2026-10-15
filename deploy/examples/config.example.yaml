@@ -4,7 +4,13 @@
 # Keys, bounds, defaults and status: docs/reference/config.md (pre-alpha: keys marked Planned are accepted and
 # validated but have no effect yet). Check your config with
 #   PYTHONPATH=<plugin dir> python -m glasses.admin config check [--config FILE] [--live]
-# (--live also checks the state dir, free ports, DNS of public_url, lane routes and the routed profiles).
+# (--live also checks the state dir, free ports, DNS of public_url, lane routes and the routed profiles; it writes
+# nothing into the Hermes home, masks every .env value of four characters or more in its output (a shorter value, or
+# a process-environment value, is hidden only as a whole profile name or timeout; a value padded with white space
+# inside quotes, NAME=" value ", is not matched at all: Hermes strips and lower-cases a route profile name, the
+# mask compares the raw value, so it is printed stripped when it is a whole route profile name - keep secrets out
+# of profile_routes names), does not discover plugins installed under a profile's
+# own home, and refuses a home the effective user does not own).
 
 gateway:
   multiplex_profiles: true
@@ -29,9 +35,6 @@ gateway:
         long_threshold: 280              # 1-512 characters
         long_answers:
           platform: telegram
-        edge:
-          kind: nginx                    # nginx | caddy | other
-          tls_dir: /etc/nginx/glasses
         # meeting: reserved for meeting mode; leave it out until you use it.
 
 # Each profile a lane is routed to (here the default profile; repeat in profiles/work/config.yaml):
@@ -39,7 +42,7 @@ platform_toolsets:                       # glasses gets exactly the tools the pr
   glasses: [hermes-telegram]
   telegram: [hermes-telegram]
 stt:
-  provider: local                        # any provider your Hermes has; voice commands use it
+  provider: local                        # any provider your Hermes has; transcribes fallback voice clips
   language: ""                           # auto-detect; "en" translates other languages into English
 agent:
   clarify_timeout: 0                     # clarifying questions never expire on the glasses

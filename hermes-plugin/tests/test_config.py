@@ -6,6 +6,7 @@ No Hermes import anywhere (enforced by conftest.py).
 
 from __future__ import annotations
 
+import dataclasses
 from types import SimpleNamespace
 
 import pytest
@@ -37,8 +38,6 @@ def test_defaults_are_generic_and_loopback():
     assert cfg.client_cert_encoding == "pem-urlescaped"
     assert cfg.long_threshold == 280  # long-answer threshold default (T1.41)
     assert cfg.long_answers_platform == "telegram"
-    assert cfg.edge_kind == "nginx"
-    assert cfg.edge_tls_dir == ""
 
 
 def test_none_extra_means_defaults():
@@ -282,26 +281,32 @@ def test_long_answers_platform():
         assert any(e.startswith("long_answers") for e in gcfg.check({"long_answers": bad}).errors)
 
 
-def test_edge():
-    cfg = gcfg.load({"edge": {"kind": "caddy", "tls_dir": "/etc/caddy/glasses"}})
-    assert (cfg.edge_kind, cfg.edge_tls_dir) == ("caddy", "/etc/caddy/glasses")
-    assert gcfg.load({"edge": {"kind": "other"}}).edge_kind == "other"
-    for bad in ({"kind": "apache"}, {"tls_dir": "relative"}, {"tls_dir": 3}, "nginx"):
-        assert any(e.startswith("edge") for e in gcfg.check({"edge": bad}).errors), bad
+@pytest.mark.parametrize(
+    "edge",
+    [{"kind": "nginx", "tls_dir": "/etc/nginx/glasses"}, {"kind": "apache", "tls_dir": "relative"}, "nginx", None],
+)
+def test_removed_edge_section_is_an_unknown_key_not_an_error(edge):
+    # The edge section is gone: the root-side installer owns the edge copy and its paths, no plugin code reads them.
+    result = gcfg.check({"edge": edge})
+    assert result.errors == []
+    assert result.warnings == ["<an unknown key of 4 characters>: unknown key, ignored"]
+    assert gcfg.load({"edge": edge}) == gcfg.load({})
+    assert "edge" not in gcfg.DEFAULTS and "edge" not in gcfg.schema()["properties"]
+    assert not [f for f in dataclasses.fields(gcfg.GlassesConfig) if f.name.startswith("edge")]
 
 
 def test_unknown_nested_keys_warn():
-    result = gcfg.check({"edge": {"kind": "nginx", "colour": "red"}, "long_answers": {"x": 1}})
+    result = gcfg.check({"signer": {"user": "", "pubilc_dir": "red"}, "long_answers": {"x": 1}})
     assert result.errors == []
-    assert "edge.colour" in " ".join(result.warnings)
-    assert "long_answers.x" in " ".join(result.warnings)
+    assert "signer.pubilc_dir: unknown key, ignored — did you mean signer.public_dir?" in result.warnings
+    assert "long_answers.<an unknown key of 1 character>: unknown key, ignored" in result.warnings
 
 
 def test_unknown_keys_warn_but_stay_valid(no_allow_all):
     result = gcfg.check({"port": 18700, "token_file": "/x", "spike_log": "/y"})
     assert result.errors == []
     assert result.config is not None
-    assert any("token_file" in w for w in result.warnings)
+    assert "<an unknown key of 10 characters>: unknown key, ignored" in result.warnings
     assert glasses.validate_config(pc({"port": 18700, "token_file": "/x"})) is True
 
 
@@ -318,9 +323,9 @@ def test_extra_must_be_mapping(no_allow_all):
 
 
 def test_all_errors_reported_at_once():
-    errors = gcfg.check({"host": "0.0.0.0", "port": 0, "edge": {"kind": "x"}}).errors
+    errors = gcfg.check({"host": "0.0.0.0", "port": 0, "long_answers": {"platform": "glasses"}}).errors
     keys = {e.split(":", 1)[0] for e in errors}
-    assert {"host", "port", "edge.kind"} <= keys
+    assert {"host", "port", "long_answers.platform"} <= keys
 
 
 def test_config_error_carries_errors():

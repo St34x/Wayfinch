@@ -6,7 +6,8 @@ Non-English voice commands reach the agent as English text, e.g. a Russian or Fr
 had been spoken in English. No error is logged.
 
 ## Context
-Voice clips from the glasses are VOICE events transcribed by whatever `stt.provider` the Hermes install uses.
+On the fallback voice path (no streaming speech-to-text configured or available), voice clips from the glasses are
+VOICE events transcribed by whatever `stt.provider` the Hermes install uses.
 
 ## Cause
 Hermes' default `stt.language` is `"en"`; with Whisper-family providers a fixed `en` means *translate to English*.

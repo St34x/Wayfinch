@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """``glasses-admin``: operator CLI of the glasses plugin. This module holds ``config check`` (T1.54);
-the CA, enrolment and revoke subcommands come later (T1.15).
+``crl`` (through the signer) and ``crl --check`` live in ``glasses.admin_crl``, ``revoke`` (signer, then the
+plugin's admin socket) in ``glasses.admin_devices`` (shared CLI pieces in ``glasses.admin_common``); the plugin
+holds no CA key; ``list`` comes later (T1.15f).
 
     python -m glasses.admin config check [--config FILE] [--hermes-home DIR] [--live]
 
@@ -10,9 +12,22 @@ gateway merges it (``gateway.platforms.glasses``, ``platforms.glasses``, ``gatew
 validation the gateway runs (``glasses.config.check``) plus the allow-all gate on the process
 environment, and prints one line per problem (``error: glasses.<path>: ...`` / ``warning: ...``)
 and a summary. Exit status: 0 = no errors (warnings allowed), 1 = errors, 2 = cannot check (FILE
-unreadable, or a required module such as ``jsonschema`` is missing: one line naming it, no traceback).
+unreadable, a file too deeply nested to parse, or a required module such as ``jsonschema`` is missing: one line
+naming it, no traceback). A platform whose ``enabled`` the gateway does not read as true (``yes``/``on``/``1``
+count as true, as for the gateway; absent, ``false``/``no``/``off`` and unrecognised strings do not) gets a warning.
 Printed values are names, numbers and paths from the deployer's own config, never secrets, and never a
-value containing ``@`` or ``://`` (``glasses.config.may_hold_credentials``).
+value containing ``@`` or ``://`` (``glasses.config.may_hold_credentials``). The names Hermes returns are
+filtered harder, because a config file can put anything there (``${VAR}`` expands to a ``.env`` value): a tool
+name is shown only when it is in Hermes' toolset table (any other is only counted), a profile name only when it is
+a plain identifier (``glasses.config_core.is_key_like``), a gate line only in its known shape, and every value of
+the ``.env`` files read of four characters or more is masked (a shorter value would blank ordinary words; it is hidden
+only where it is the whole routed profile name, and a timeout is never printed as a number). A process-environment
+value, or a shorter ``.env`` value, inside a longer plain profile name can still be printed. A ``.env`` value
+padded with white space inside quotes (``NAME=" value "``) is not matched: Hermes strips and lower-cases a route
+profile name, the mask and the hiding compare the raw value, so such a value used as a whole route profile name is
+printed in its stripped, lower-cased form. A
+``--config``/``--hermes-home`` that is a URL (``://`` in the raw argument) is
+refused before it is converted to a path (exit 2, one line, the value not shown).
 
 ``--live`` adds what needs this host and the Hermes install (``live_problems``): the state dir exists
 with mode 0700, ``port``/``bridge_port`` are free on ``host``, ``public_url`` is set and its host
@@ -23,35 +38,24 @@ auto-detects one), ``stt.language`` not
 to the ``telegram`` one, clarify timeout <= 0 (never expires) and ``approvals.timeout`` > 0 (expires,
 fail closed); plus the allow-all gate in every profile scope (``glasses.gate``). The Hermes facts come
 from ``glasses.hermes_facts``, which imports Hermes and must run with the Hermes venv's python; it starts
-nothing, but it is NOT read-only today: Hermes' config load creates the home skeleton (``hooks/``, ``logs/``,
-``cron/``, ``sessions/``, ``backups/``, ``SOUL.md``, ...) in the home it checks -- point it at a copy or accept
-that (known gap, strict xfail ``test_real_live_does_not_write_into_the_hermes_home``). ``--live`` checks the
-same Hermes home as the static check: ``HERMES_HOME`` is set to ``--hermes-home`` (else ``$HERMES_HOME``, else
-``~/.hermes``) in this process before the first Hermes import, and a ``--config`` that is not
-``<home>/config.yaml`` is refused (exit 2). Tests inject fakes through ``Probes``.
+nothing and writes nothing into the Hermes home or a routed profile home (no skeleton, no ``SOUL.md``, no
+chmod, no ``config.yaml.good`` backup: Hermes is imported under a throwaway home and the configs are read
+without Hermes' loaders), so a snapshot of the home is identical before and after. Before it reads anything,
+``--live`` refuses (exit 2, one line) when the effective user does not own the Hermes home. ``--live`` checks
+the same Hermes home as the static check: ``HERMES_HOME`` is set to ``--hermes-home`` (else ``$HERMES_HOME``,
+else ``~/.hermes``) in this process before the first Hermes import, and a ``--config`` that is not
+``<home>/config.yaml`` is refused (exit 2). The env-dependent facts (``${VAR}`` in a config.yaml,
+``HERMES_LOCAL_STT_LANGUAGE``) are evaluated against the environment the gateway sees: the process environment
+overlaid with ``<home>/.env`` around the pure config reads only (a regular file of at most 1 MiB, read, never
+rewritten; names that load code, such as ``PATH`` or the plugin switches, are not taken from it; a ``.env`` that
+is not a regular file is an error line, the allow-all gate could not look; the process environment is restored
+afterwards) and the ``allow_all_users`` grant of ``config.yaml`` (top level or under ``gateway:``) reaches the
+allow-all gate the way Hermes' bridge delivers it to the gateway. Plugins installed under a profile's own home are
+not discovered (tool parity is computed from the configuration). Hermes' own log output is silenced. Tests inject
+fakes through ``Probes``.
 
-T1.45 contract-test list -- private Hermes APIs and copied Hermes behaviour (pinned a4648c5f58), each to
-be pinned by a contract test so a Hermes bump fails loudly instead of drifting:
-
-* ``hermes_cli.tools_config._get_platform_tools(config, platform) -> set[str]`` (private; design D5a).
-* ``tools.transcription_tools._resolve_stt_language`` -- copied in ``hermes_facts.stt_language``:
-  ``stt.<provider>.language`` (+ ``language_code`` for elevenlabs, tools/transcription_cloud.py:336) >
-  ``stt.language`` > env ``tools.transcription_common.LOCAL_STT_LANGUAGE_ENV`` (imported, not copied).
-* ``tools.approval_context._get_approval_timeout`` -- copied in ``hermes_facts.approvals_timeout``:
-  ``int(approvals.timeout)``, 300 when missing or not a number (its upper clamp does not affect ``<= 0``).
-* ``gateway.platforms._shared`` -- imported for its side effect: ``glasses.gate`` then reads every profile.
-* ``glasses.hermes_merge.platform_view`` -- copy of ``gateway.config_loader.merge_platform_sections``,
-  ``PlatformConfig.from_dict`` (private ``PlatformConfig._TYPED_KEYS``) and the root-block bridge
-  (``_bridged_keys``); differential test in tests/test_config_check_merge.py.
-* Shapes asserted at run time (``HermesContractError``, a clear error, never a silent default):
-  ``load_config_readonly()`` returns a mapping, its ``stt``/``approvals`` are mappings or null,
-  ``_get_platform_tools`` returns a set of names.
-
-Public Hermes APIs used instead of copies: ``hermes_cli.config.load_config_readonly`` (defaults, canonical
-keys, env expansion, managed overlay; like any Hermes read it may initialise a missing profile skeleton
-and keep a last-known-good backup of config.yaml), ``hermes_constants.set/reset_hermes_home_override``,
-``tools.clarify_gateway.resolve_clarify_timeout``, ``gateway.config.load_gateway_config``,
-``gateway.profile_routing.match_profile_route``, ``hermes_cli.profiles.profiles_to_serve``.
+T1.45 contract-test list (private Hermes APIs and copied Hermes behaviour, pinned a4648c5f58): see the
+docstring of ``glasses.hermes_facts``.
 """
 
 from __future__ import annotations
@@ -61,12 +65,15 @@ import os
 import socket
 import stat
 import sys
-from collections.abc import Callable, Iterable, Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, TextIO
+from typing import TextIO
 from urllib.parse import urlsplit
 
+from . import admin_crl, admin_devices
+from .admin_common import SECTION, ConfigFileError, hermes_home, read_platform_section, shown_path
+from .admin_names import mask_lines, names_shown, shown_name, shown_problem
 from .config import (
     PLATFORM_NAME,
     DependencyMissing,
@@ -77,26 +84,21 @@ from .config import (
     may_hold_credentials,
     resolve_state_dir,
 )
+from .hermes_env import hermes_home_env
 from .hermes_facts import (  # noqa: F401 - re-exported: tests and callers use admin.HermesFacts etc.
     DEFAULT_PROFILE,
     HermesContractError,
     HermesFacts,
     ProfileFacts,
+    gateway_enabled,
     hermes_facts,
-    hermes_home_env,
     lanes_to_route,
     stt_language,
 )
-from .hermes_merge import LOCATIONS, PlatformView, platform_view
+from .hermes_merge import PlatformView
 
 EXIT_OK, EXIT_ERRORS, EXIT_UNREADABLE = 0, 1, 2
-SECTION = ("gateway", "platforms", PLATFORM_NAME)
 STATE_DIR_MODE = 0o700
-MAX_LISTED_TOOLS = 10
-
-
-class ConfigFileError(Exception):
-    """The Hermes config file cannot be read or has no glasses section (message names no value)."""
 
 
 @dataclass
@@ -109,46 +111,11 @@ class Report:
         self.warnings.extend(other.warnings)
 
 
-def shown_path(path: Any) -> str:
-    """*path* for a message, unless it contains ``@`` or ``://`` (it could carry credentials)."""
-    return "<path not shown: it contains '@' or '://'>" if may_hold_credentials(str(path)) else str(path)
-
-
-def read_platform_section(path: Path) -> PlatformView:
-    """The glasses platform of a Hermes config file as the gateway merges it (``hermes_merge``);
-    ``ConfigFileError`` otherwise.
-
-    YAML errors are reported by position only: the offending line could hold a secret.
-    """
-    try:
-        import yaml  # in the Hermes venv; only the CLI needs it
-    except ImportError:
-        raise DependencyMissing("PyYAML") from None
-
-    where = shown_path(path)
-    try:
-        text = path.read_text(encoding="utf-8")
-    except (OSError, UnicodeDecodeError) as exc:
-        raise ConfigFileError(f"{where}: cannot read ({type(exc).__name__})") from None
-    try:
-        data = yaml.safe_load(text)
-    except yaml.YAMLError as exc:
-        mark = getattr(exc, "problem_mark", None)
-        at = f" at line {mark.line + 1}, column {mark.column + 1}" if mark is not None else ""
-        raise ConfigFileError(f"{where}: not valid YAML{at}") from None
-    view = platform_view(data)
-    if view is None:
-        raise ConfigFileError(
-            f"{where}: no {'.'.join(SECTION)} mapping (nor any other glasses block: {', '.join(LOCATIONS[1:])})"
-        )
-    return view
-
-
 def static_report(view: PlatformView, env: Mapping[str, str]) -> tuple[Report, GlassesConfig | None]:
     """The gateway's validation of the merged platform *view* plus the allow-all gate of *env*."""
     result = check(view.extra)
     report = Report([f"{PLATFORM_NAME}.{e}" for e in result.errors], [f"{PLATFORM_NAME}.{w}" for w in result.warnings])
-    if view.enabled is not True:
+    if not gateway_enabled(view.enabled):
         report.warnings.append(f"{'.'.join(SECTION)}.enabled: not true — the gateway will not start the platform")
     report.errors.extend(f"environment: {p}" for p in gate_violations(environ_reader(env)))
     return report, result.config
@@ -159,11 +126,22 @@ def static_report(view: PlatformView, env: Mapping[str, str]) -> tuple[Report, G
 # --------------------------------------------------------------------------------------------
 
 
+def home_is_owned(home: Path) -> bool:
+    """True when the effective user owns *home* (a home that does not exist yet has nothing to protect)."""
+    try:
+        return home.stat().st_uid == os.geteuid()
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return False
+
+
 @dataclass(frozen=True)
 class Probes:
     port_free: Callable[[str, int], bool]
     resolves: Callable[[str], bool]
     hermes: Callable[[GlassesConfig], HermesFacts]
+    owns_home: Callable[[Path], bool] = home_is_owned
 
 
 def port_free(host: str, port: int) -> bool:
@@ -230,7 +208,7 @@ def _routed_profiles(cfg: GlassesConfig, facts: HermesFacts, report: Report) -> 
         profile = facts.routes.get(lane, DEFAULT_PROFILE)
         if profile not in facts.served or profile not in facts.profiles:
             report.errors.append(
-                f"{PLATFORM_NAME}.lanes: lane {lane!r} is routed to profile {profile!r}, which "
+                f"{PLATFORM_NAME}.lanes: lane {lane!r} is routed to profile {shown_name(profile, quote=True)}, which "
                 f"this gateway does not serve — fix gateway.profile_routes or serve that profile "
                 f"(the gateway would drop the lane's messages)"
             )
@@ -239,15 +217,11 @@ def _routed_profiles(cfg: GlassesConfig, facts: HermesFacts, report: Report) -> 
     return routed
 
 
-def _names(names: Iterable[str]) -> str:
-    listed = sorted(names)
-    more = f" (+{len(listed) - MAX_LISTED_TOOLS} more)" if len(listed) > MAX_LISTED_TOOLS else ""
-    return (", ".join(listed[:MAX_LISTED_TOOLS]) or "none") + more
-
-
-def profile_problems(name: str, facts: ProfileFacts, language_hints: Sequence[str]) -> Report:
+def profile_problems(
+    name: str, facts: ProfileFacts, language_hints: Sequence[str], known: frozenset[str] = frozenset()
+) -> Report:
     """Problems of one routed profile (names and numbers only)."""
-    where = f"profile {name}"
+    where = f"profile {shown_name(name)}"
     report = Report()
     out = report.errors
     if not facts.stt_provider:  # unset = Hermes auto-detects a provider; voice may still work
@@ -265,18 +239,19 @@ def profile_problems(name: str, facts: ProfileFacts, language_hints: Sequence[st
     if facts.glasses_tools != facts.telegram_tools:
         out.append(
             f"{where}: the glasses tool set differs from telegram (missing on glasses: "
-            f"{_names(facts.telegram_tools - facts.glasses_tools)}; only on glasses: "
-            f"{_names(facts.glasses_tools - facts.telegram_tools)}) — set platform_toolsets.glasses to "
+            f"{names_shown(facts.telegram_tools - facts.glasses_tools, known)}; only on glasses: "
+            f"{names_shown(facts.glasses_tools - facts.telegram_tools, known)}) — set platform_toolsets.glasses to "
             f"the profile's telegram list"
         )
     if facts.clarify_timeout > 0:
         out.append(
-            f"{where}: clarify timeout resolves to {facts.clarify_timeout} s — set agent.clarify_timeout: 0 "
+            f"{where}: clarify timeout resolves to a positive number of seconds — set agent.clarify_timeout: 0 "
             f"(clarifying questions on the glasses never expire)"
         )
     if facts.approvals_timeout <= 0:
+        shown = "0" if facts.approvals_timeout == 0 else "a negative number"  # a ${VAR} value is never echoed
         out.append(
-            f"{where}: approvals.timeout resolves to {facts.approvals_timeout} — set a positive number of "
+            f"{where}: approvals.timeout resolves to {shown} — set a positive number of "
             f"seconds (approvals expire and fail closed)"
         )
     return report
@@ -300,16 +275,16 @@ def live_problems(cfg: GlassesConfig, hermes_home: Path, probes: Probes) -> Repo
     _host_problems(cfg, probes, report)
     try:
         facts = probes.hermes(cfg)
-    except Exception as exc:  # outermost CLI boundary: Hermes missing or its config unreadable
+    except Exception as exc:  # noqa: BLE001 - outermost CLI boundary: Hermes missing or its config unreadable
         report.errors.append(_hermes_error(exc))
         return report
     # The process environment is already checked by static_report.
     report.errors.extend(
-        f"allow-all gate: {p}" for p in facts.gate_problems if not p.startswith("process environment:")
+        f"allow-all gate: {shown_problem(p)}" for p in facts.gate_problems if not p.startswith("process environment:")
     )
     for name in _routed_profiles(cfg, facts, report):
-        report.extend(profile_problems(name, facts.profiles[name], cfg.language_hints))
-    return report
+        report.extend(profile_problems(name, facts.profiles[name], cfg.language_hints, facts.known_toolsets))
+    return Report(mask_lines(report.errors, facts.env_values), mask_lines(report.warnings, facts.env_values))
 
 
 DEFAULT_PROBES = Probes(port_free=port_free, resolves=resolves, hermes=hermes_facts)
@@ -325,8 +300,14 @@ def print_report(report: Report, out: TextIO) -> int:
     return EXIT_ERRORS if report.errors else EXIT_OK
 
 
-def _live_home_mismatch(args: argparse.Namespace, home: Path) -> str | None:
-    """Why --live cannot check *home*: Hermes reads ``<home>/config.yaml``, never another --config file."""
+def _live_home_mismatch(args: argparse.Namespace, home: Path, probes: Probes) -> str | None:
+    """Why --live cannot check *home*: another user owns it, or Hermes reads ``<home>/config.yaml``, never
+    another --config file."""
+    if not probes.owns_home(home):
+        return (
+            f"--live: the Hermes home {shown_path(home)} is owned by another user — run glasses-admin as "
+            f"the user that owns it (nothing was read)"
+        )
     if args.config is None or Path(args.config).resolve() == (home / "config.yaml").resolve():
         return None
     return (
@@ -336,10 +317,25 @@ def _live_home_mismatch(args: argparse.Namespace, home: Path) -> str | None:
     )
 
 
+def _local_paths(args: argparse.Namespace) -> argparse.Namespace:
+    """*args* with ``--config`` and ``--hermes-home`` as ``Path``s. ``Path`` collapses ``//``, so a URL is
+    recognised on the raw argv string, before the conversion (``ConfigFileError``; the value is not shown)."""
+    for flag, value in (("--config", args.config), ("--hermes-home", args.hermes_home)):
+        if value is not None and "://" in str(value):
+            raise ConfigFileError(f"{flag}: not a local path (it contains '://'; the value is not shown)")
+    paths = {key: None if getattr(args, key) is None else Path(getattr(args, key)) for key in ("config", "hermes_home")}
+    return argparse.Namespace(**{**vars(args), **paths})
+
+
 def config_check(args: argparse.Namespace, env: Mapping[str, str], out: TextIO, probes: Probes) -> int:
-    home = Path(args.hermes_home or env.get("HERMES_HOME") or Path.home() / ".hermes")
+    try:
+        args = _local_paths(args)
+    except ConfigFileError as exc:
+        print(f"error: {exc}", file=out)
+        return EXIT_UNREADABLE
+    home = hermes_home(args, env)
     path = args.config or home / "config.yaml"
-    mismatch = _live_home_mismatch(args, home) if args.live else None
+    mismatch = _live_home_mismatch(args, home, probes) if args.live else None
     try:
         if mismatch:
             raise ConfigFileError(mismatch)
@@ -362,9 +358,18 @@ def build_parser() -> argparse.ArgumentParser:
     config = commands.add_parser("config", help="configuration commands")
     actions = config.add_subparsers(dest="action", required=True)
     chk = actions.add_parser("check", help="validate gateway.platforms.glasses of a Hermes config")
-    chk.add_argument("--config", type=Path, help="Hermes config.yaml (default: $HERMES_HOME/config.yaml)")
-    chk.add_argument("--hermes-home", type=Path, help="Hermes home (default: $HERMES_HOME, else ~/.hermes)")
-    chk.add_argument("--live", action="store_true", help="also check this host and the routed Hermes profiles")
+    chk.add_argument("--config", help="Hermes config.yaml (default: $HERMES_HOME/config.yaml)")
+    chk.add_argument("--hermes-home", help="Hermes home (default: $HERMES_HOME, else ~/.hermes)")
+    chk.add_argument(
+        "--live",
+        action="store_true",
+        help=(
+            "also check this host and the routed Hermes profiles (read-only; plugins installed under a "
+            "profile's own home are not discovered, tool parity is computed from the configuration only)"
+        ),
+    )
+    admin_crl.register(commands)
+    admin_devices.register(commands)
     return parser
 
 
@@ -375,6 +380,8 @@ def main(
     probes: Probes | None = None,
 ) -> int:
     args = build_parser().parse_args(argv)
+    if args.command != "config":  # subcommands of the admin_* modules carry their handler
+        return int(args.run(args, os.environ if env is None else env, out or sys.stdout))
     return config_check(args, os.environ if env is None else env, out or sys.stdout, probes or DEFAULT_PROBES)
 
 

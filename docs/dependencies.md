@@ -23,8 +23,9 @@ on another Python version or commit may ship other patch versions; the plugin mu
 difference. Which runtime libraries a Hermes install has depends on its extras (ENGINEERING.md §8).
 
 What the plugin code uses **today**: `jsonschema` (config validation, `config.py`) and `PyYAML` (operator CLI only,
-`admin.py`). `aiohttp` and `cryptography` are **not imported yet**: they are reserved for the planned transport and
-device CA. The plugin's requirement probe (`check_requirements` in `glasses/__init__.py`) already checks that
+`admin_common.py`) and `cryptography` (parsing and verifying the signer's published CA and CRL bundles, `crl_check.py`; the
+CLI imports it only inside `crl --check`, so `config check` and `crl` run without it) and `aiohttp` (the `/enroll`
+relay, `enroll.py`; built, mounted on the plugin's HTTP app only by the planned transport, T1.07). The plugin's requirement probe (`check_requirements` in `glasses/__init__.py`) already checks that
 `aiohttp`, `jsonschema` and `cryptography` are importable: in a Hermes venv without one of them the gateway does not
 build the platform and logs `Platform 'Glasses' requirements not met (<install hint>)`. Outside the plugin, `aiohttp`
 is imported by the test platform under `tools/test-hermes/`, which runs in the test Hermes venv
@@ -34,10 +35,10 @@ is imported by the test platform under `tools/test-hermes/`, which runs in the t
 
 | Name | Version | Licence | Scope | Why | Alternative rejected |
 |---|---|---|---|---|---|
-| aiohttp | 3.14.3 | Apache-2.0 AND MIT | runtime | Planned (not imported yet): WebSocket/HTTP server of the glasses platform adapter | `websockets` — also a Hermes core dependency, but one aiohttp server serves both the WebSocket and the HTTP `/enroll` endpoint |
+| aiohttp | 3.14.3 | Apache-2.0 AND MIT | runtime | HTTP server of the glasses platform adapter: imported by the `/enroll` relay (`enroll.py`); the WebSocket server and the mounting are planned (T1.07) | `websockets` — also a Hermes core dependency, but one aiohttp server serves both the WebSocket and the HTTP `/enroll` endpoint |
 | jsonschema | 4.26.0 | MIT | runtime | Validates the plugin config (and, in tests, protocol messages) against the JSON Schema 2020-12 files | `fastjsonschema` — not in the Hermes venv; hand-written validators drift from the schema |
 | PyYAML | 6.0.3 | MIT | runtime | Reads the Hermes `config.yaml` in the operator CLI and in tests | `ruamel.yaml` — round-trip editing is not needed for reading |
-| cryptography | 50.0.1 | Apache-2.0 OR BSD-3-Clause | runtime | Planned (not imported yet): device CA and client certificates (key generation, signing, parsing) | Calling the `openssl` CLI — output parsing and version differences per platform |
+| cryptography | 50.0.1 | Apache-2.0 OR BSD-3-Clause | runtime | Parsing and verifying the signer's published device CA and CRL bundles (`crl --check`): `crl_check.py`; the plugin holds no CA key | Calling the `openssl` CLI — output parsing and version differences per platform |
 | pytest | 9.1.1 | MIT | dev | Test runner for every Python suite (fixtures, parametrize, `tmp_path`) | stdlib `unittest` — more boilerplate, no parametrized fixtures |
 | ruff | 0.16.10 | MIT | dev | Lint, format, complexity and size rules in one pinned binary | flake8 + black + isort + mccabe — four tools and four pins for the same rules |
 | mypy | 2.4.0 | MIT | dev | Static types, `--strict` | pyright — needs a Node.js runtime in the dev toolchain |
@@ -45,7 +46,7 @@ is imported by the test platform under `tools/test-hermes/`, which runs in the t
 | import-linter | 2.15 | BSD-2-Clause | dev | Import contracts: the core never imports an adapter, framework or I/O library | AST check only — misses indirect imports through other modules |
 | coverage | 7.16.2 | Apache-2.0 | dev | Branch coverage and the per-area `--fail-under` gates | stdlib `trace` — no branch coverage, no thresholds |
 | pytest-cov | 7.1.0 | MIT | dev | Collects coverage inside the pytest run the suites already use (`--cov`) | Wrapping each pytest call in `coverage run` — a second command line per gate target |
-| hypothesis | 6.168.3 | MPL-2.0 | dev | Property-based tests of the envelope codec and UTF-8 cutting (`hermes-plugin/tests/test_envelope_text.py`, `test_envelope_decode.py`, `test_envelope_decode_properties.py`; shrinks failing inputs) | Hand-written random loops — no shrinking, no reproducible failure database |
+| hypothesis | 6.168.3 | MPL-2.0 | dev | Property-based tests of the envelope codec, UTF-8 cutting and the signer protocol (`hermes-plugin/tests/test_envelope_text.py`, `test_envelope_decode.py`, `test_envelope_decode_properties.py`, `test_signer_protocol_properties.py`; shrinks failing inputs) | Hand-written random loops — no shrinking, no reproducible failure database |
 
 ## Tool binaries
 

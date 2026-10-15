@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """Edge cases of the unknown-key display rule (config check output and the gateway log).
 
-Only a key-like name (1-32 characters, an ASCII letter first, then letters, '_' and '-', at most 2 digits) is shown
-as written. Look-alike letters, invisible and bidi-control characters, Unicode digits, non-string keys and nested
-unknown keys under every schema section are shown as ``<an unknown key of N characters>``; a did-you-mean hint names
-only a schema key; every output line stays one printable line. Token-shaped names are built at run time.
+A name is shown as written only when it is a near-miss of a schema key at the same level (at most
+max(2, 20 % of that key's length) edits after lower-casing, '-' read as '_') AND key-like (1-32 characters, an ASCII
+letter first, then letters, '_' and '-', at most 2 digits). Look-alike letters, invisible and bidi-control characters,
+Unicode digits, non-string keys and nested unknown keys under every schema section are shown as
+``<an unknown key of N characters>``; a did-you-mean hint names only a schema key; every output line stays one
+printable line. Token-shaped names are built at run time.
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ import pytest
 import yaml
 
 from glasses import config as gcfg
-from glasses.config_core import key_name
+from glasses.config_core import is_key_like, key_name
 
 from conftest import PLUGIN_ROOT
 
@@ -92,10 +94,46 @@ def test_lookalike_or_invisible_character_name_is_a_placeholder(key: str) -> Non
         "trailing-underscore",
     ],
 )
-def test_key_like_boundaries(key: str, shown: bool) -> None:
+def test_key_like_shape_boundaries(key: str, shown: bool) -> None:
+    assert is_key_like(key) is shown
+    assert key_name(key, "port") == (key if shown else placeholder(key))
+
+
+@pytest.mark.parametrize(
+    ("key", "hint"),
+    [
+        ("hostxx", "host"),
+        ("hostxxx", None),
+        ("ohst", "host"),
+        ("client_cert_encodingxxxx", "client_cert_encoding"),
+        ("client_cert_encodingxxxxx", None),
+        ("Client-Cert-Encodnig", "client_cert_encoding"),
+        ("lng_thrshold", "long_threshold"),
+        ("lng_thrshld", None),
+        ("port12", "port"),
+        ("port123", None),
+    ],
+    ids=[
+        "2-edits-of-4",
+        "3-edits-of-4",
+        "swap-is-1-edit",
+        "4-edits-of-20",
+        "5-edits-of-20",
+        "case-and-dash",
+        "2-edits-of-14",
+        "3-edits-of-14",
+        "2-digits",
+        "3-digit-suffix",
+    ],
+)
+def test_near_miss_boundaries(key: str, hint: str | None) -> None:
     [warning] = warnings_for({key: 1})
-    expected = key if shown else placeholder(key)
-    assert warning == f"{expected}: unknown key, ignored", warning
+    if hint is None:
+        assert warning == f"{placeholder(key)}: unknown key, ignored", warning
+    elif is_key_like(key):
+        assert warning == f"{key}: unknown key, ignored — did you mean {hint}?", warning
+    else:
+        assert warning == f"{placeholder(key)}: unknown key, ignored — did you mean {hint}?", warning
 
 
 @pytest.mark.parametrize(
@@ -163,21 +201,21 @@ def test_nested_unknown_key_under_every_section_is_a_placeholder(section: str) -
 
 
 def test_gateway_log_shows_placeholders_for_lookalike_and_token_names(caplog: pytest.LogCaptureFixture) -> None:
-    extra = {**BASE, **{k: 1 for _, k in LOOKALIKES}, FAKE_TOKEN: 2, "edge": {"kind": "nginx", "e\u200bdge": 3}}
+    extra = {**BASE, **{k: 1 for _, k in LOOKALIKES}, FAKE_TOKEN: 2, "signer": {"user": "", "e\u200bdge": 3}}
     with caplog.at_level(logging.DEBUG):
         assert gcfg.validate_config({"extra": extra}) is True
     messages = [r.getMessage() for r in caplog.records]
     assert FAKE_TOKEN not in caplog.text and "\u200b" not in caplog.text and "\u202e" not in caplog.text
     for _, key in LOOKALIKES:
         assert any(f"glasses.{placeholder(key)}: unknown key" in m for m in messages), (key, messages)
-    assert any("glasses.edge.<an unknown key of 5 characters>: unknown key" in m for m in messages), messages
+    assert any("glasses.signer.<an unknown key of 5 characters>: unknown key" in m for m in messages), messages
     assert all("\n" not in m and "\r" not in m for m in messages), messages
 
 
 def test_config_check_cli_output_names_only_key_like_names(tmp_path: Path) -> None:
     url_key, lookalike = "wss://u:pw@h.example.com/ws", "c\u043elour"
     extra: dict[str, Any] = {**BASE, "hots": "127.0.0.1", FAKE_TOKEN: 1, url_key: 2, lookalike: 3}
-    extra["edge"] = {"kind": "nginx", FAKE_TOKEN + "x": 4}
+    extra["signer"] = {"user": "", FAKE_TOKEN + "x": 4}
     config = tmp_path / "config.yaml"
     data = {"gateway": {"platforms": {"glasses": {"enabled": True, "extra": extra}}}}
     config.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
@@ -198,7 +236,7 @@ def test_config_check_cli_output_names_only_key_like_names(tmp_path: Path) -> No
         f"warning: glasses.{placeholder(FAKE_TOKEN)}: unknown key, ignored",
         f"warning: glasses.{placeholder(url_key)}: unknown key, ignored",
         f"warning: glasses.{placeholder(lookalike)}: unknown key, ignored",
-        f"warning: glasses.edge.{placeholder(FAKE_TOKEN + 'x')}: unknown key, ignored",
+        f"warning: glasses.signer.{placeholder(FAKE_TOKEN + 'x')}: unknown key, ignored",
     ]), proc.stdout
     assert summary == "config check: OK (0 error(s), 5 warning(s))", proc.stdout
     assert FAKE_TOKEN not in proc.stdout + proc.stderr and "pw@" not in proc.stdout and lookalike not in proc.stdout

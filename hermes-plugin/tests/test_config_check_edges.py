@@ -4,9 +4,8 @@
 Credential-looking key names and --live names (values: test_config_check_credentials.py); missing ``jsonschema`` /
 ``PyYAML`` on the CLI and the gateway side; unset ``stt.provider``; platform-level keys at every block
 location, plus a differential against the full ``gateway.config.load_gateway_config``; the Hermes home of
-``--live``: no wrong-home read, and what ``--live`` writes into the home it checks. Real-Hermes tests run the
-Hermes venv in a subprocess with a scratch HERMES_HOME under <worktree>/.local/hh-t154. Open defects are
-strict xfails.
+``--live``: no wrong-home read, and that it writes nothing into the home it checks. Real-Hermes tests run the
+Hermes venv in a subprocess with a scratch HERMES_HOME under <worktree>/.local/hh-t154.
 """
 
 from __future__ import annotations
@@ -23,7 +22,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from glasses import admin
+from glasses import admin, hermes_merge
 from glasses import config as gcfg
 
 from conftest import PLUGIN_ROOT
@@ -69,11 +68,6 @@ def run_live(home, facts):
 # -- never echo a value containing '@' or '://' ----------------------------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="known gap: '--config' is a Path, so '//' is collapsed before "
-    "shown_path tests for '://' and 'scheme://KEY' (no '@') is printed",
-)
 def test_config_path_with_a_scheme_is_not_shown(tmp_path):
     out = io.StringIO()
     admin.main(["config", "check", "--config", f"/nonexistent/x://{SECRET}/config.yaml"], {}, out)
@@ -94,11 +88,6 @@ def test_unknown_key_named_like_a_credential_url_not_shown(tmp_path, data):
     assert SECRET not in out, out
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="known gap: --live echoes the profile name of a "
-    "gateway.profile_routes entry even when it contains '@' or '://'",
-)
 def test_live_route_to_a_credential_looking_profile_not_shown(tmp_path):
     facts = admin.HermesFacts(frozenset({"default"}), {"work": f"https://u:{SECRET}@h"}, {"default": GOOD})
     code, out = run_live(live_home(tmp_path), facts)
@@ -106,9 +95,6 @@ def test_live_route_to_a_credential_looking_profile_not_shown(tmp_path):
     assert SECRET not in out, out
 
 
-@pytest.mark.xfail(
-    strict=True, reason="known gap: --live lists tool names as Hermes returns them, without the '@'/'://' filter"
-)
 def test_live_tool_names_are_filtered_too(tmp_path):
     odd = admin.ProfileFacts("local", "", frozenset({f"u:{SECRET}@h"}), frozenset({"web"}), 0, 300)
     facts = admin.HermesFacts(frozenset({"default", "work"}), {"work": "work"}, {"default": GOOD, "work": odd})
@@ -144,22 +130,11 @@ def test_non_loopback_host_and_allow_all_keys_refused_at_every_location(tmp_path
         assert needle in out, out
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="known gap: Hermes coerces a bool-ish 'enabled' string (yes/on/"
-    "true) and starts the platform; config check warns it will not start",
-)
 def test_boolish_enabled_string_is_not_reported_as_disabled(tmp_path):
     code, out = check_file(tmp_path, {"gateway": {"platforms": {"glasses": {"enabled": "yes", "extra": EXTRA}}}})
     assert code == admin.EXIT_OK and "enabled: not true" not in out, out
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=RecursionError,
-    reason="known gap: a deeply nested config.yaml escapes config check as RecursionError "
-    "(traceback) instead of 'not valid YAML', exit 2",
-)
 def test_deeply_nested_yaml_is_exit_2(tmp_path):
     code, out = check_file(tmp_path, None, "gateway: " + "[" * 20000 + "]" * 20000)
     assert code == admin.EXIT_UNREADABLE and len(out.splitlines()) == 1
@@ -253,7 +228,7 @@ def test_view_equals_the_full_hermes_gateway_load():
     assert proc.returncode == 0, proc.stderr[-2000:]
     hermes = json.loads(proc.stdout.strip().splitlines()[-1])
     for case, got in zip(DIFF_CASES, hermes, strict=True):
-        view = admin.platform_view(case)
+        view = hermes_merge.platform_view(case)
         assert got is not None and view is not None, case
         assert view.extra == got["extra"], (case, got)
         assert gcfg.check(view.extra).errors == gcfg.check(got["extra"]).errors
@@ -324,21 +299,22 @@ def _live_scratch(root: Path, stt_provider=True) -> Path:
 
 
 def _snapshot(home: Path) -> dict[str, tuple[int, int, int]]:
+    """(mtime, size, mode) of the home directory itself (``.``) and everything below it."""
     return {
         str(p.relative_to(home)): (p.lstat().st_mtime_ns, p.lstat().st_size, p.lstat().st_mode)
-        for p in sorted(home.rglob("*"))
+        for p in [home, *sorted(home.rglob("*"))]
     }
 
 
-def _real_live(home: Path, user: Path):
-    env = {"PATH": "/usr/bin:/bin", "HOME": str(user)}  # no HERMES_HOME: only --hermes-home names the home
+def _real_live(home: Path, user: Path, env_extra=None, timeout=240):
+    env = {"PATH": "/usr/bin:/bin", "HOME": str(user), **(env_extra or {})}  # no HERMES_HOME: only --hermes-home
     return subprocess.run(
         [str(hermes_python()), "-m", "glasses.admin", "config", "check", "--live", "--hermes-home", str(home)],
         cwd=PLUGIN_ROOT,
         env=env,
         capture_output=True,
         text=True,
-        timeout=240,
+        timeout=timeout,
     )
 
 
@@ -365,12 +341,6 @@ def test_real_live_second_run_on_an_initialised_home_writes_nothing():
     assert proc.returncode == admin.EXIT_OK and after == before
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="known gap: --live writes into the Hermes home it checks "
-    "(Hermes' load_config_readonly: home skeleton + SOUL.md, profile dirs "
-    "chmod 0700, a config.yaml.good backup per changed config, rotating old ones)",
-)
 def test_real_live_does_not_write_into_the_hermes_home():
     with _scratch() as tmp:
         home, user = _live_scratch(Path(tmp)), Path(tmp) / "user"

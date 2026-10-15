@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import json
+import re
+from urllib.parse import urlsplit
 
 import pytest
 import yaml
@@ -49,7 +51,7 @@ def test_schema_covers_every_key_and_defaults_match():
     assert set(props) == set(gcfg.DEFAULTS)
     for key, default in gcfg.DEFAULTS.items():
         assert props[key]["default"] == default, key
-    for section in ("long_answers", "edge"):
+    for section in ("long_answers", "signer"):
         nested = {k: v["default"] for k, v in props[section]["properties"].items()}
         assert nested == gcfg.DEFAULTS[section], section
 
@@ -90,9 +92,64 @@ def test_example_validates_against_the_raw_schema_too():
     assert list(Draft202012Validator(gcfg.schema()).iter_errors(example_extra())) == []
 
 
+def strings(node):
+    """Every string value of a parsed YAML document."""
+    if isinstance(node, str):
+        yield node
+    elif isinstance(node, dict):
+        for value in node.values():
+            yield from strings(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from strings(value)
+
+
+HOST_NAME = re.compile(r"[a-z0-9-]+(?:\.[a-z0-9-]+)*")
+URL_TOKEN = re.compile(r"\b[a-z][a-z0-9+.-]*://\S+", re.IGNORECASE)
+DOTTED = re.compile(r"[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+(?::\d+)?")  # a bare host (or IP) value
+LOOPBACK = frozenset({"127.0.0.1", "localhost"})
+
+
+def example_host(url_or_host):
+    """Whether a URL or bare host names example.com or a subdomain of it: the parsed host, never a substring test
+    (`evil.net/?example.com`, `example.com.evil.net` fail). Fails closed on anything a browser could read differently:
+    a backslash (WHATWG reads it as `/`, urlsplit does not) or a host that is not plain lower-case ASCII labels."""
+    if "\\" in url_or_host:
+        return False
+    try:
+        host = urlsplit(url_or_host if "://" in url_or_host else f"//{url_or_host}").hostname or ""
+    except ValueError:
+        return False
+    return HOST_NAME.fullmatch(host) is not None and (host == "example.com" or host.endswith(".example.com"))
+
+
+@pytest.mark.parametrize(
+    ("value", "ok"),
+    [
+        ("wss://glasses.example.com/ws", True),
+        ("stt.example.com", True),
+        ("wss://example.com.evil.net/ws", False),
+        ("wss://evil.net/?next=example.com", False),
+        ("wss://example.com\x40evil.net/ws", False),
+        (r"https://evil.net\.example.com/", False),
+        (r"https://evil.net\@example.com/", False),
+        ("evil.net", False),
+        ("https://evil.net%2f.example.com/", False),
+    ],
+)
+def test_example_host_check_parses_the_host(value, ok):
+    assert example_host(value) is ok
+
+
 def test_example_names_nothing_private():
     text = EXAMPLE.read_text(encoding="utf-8")
-    assert "example.com" in text
+    values = list(strings(yaml.safe_load(text)))
+    # URL tokens of the raw text (YAML comments too) and of every value, plus bare host values like `evil.net`.
+    urls = [token.rstrip("`'\").,;:|>") for token in URL_TOKEN.findall(text)] + [v for v in values if "://" in v]
+    hosts = [value for value in values if DOTTED.fullmatch(value) and value not in LOOPBACK]
+    assert urls
+    bad = [value for value in urls + hosts if not example_host(value)]
+    assert not bad, bad
     for word in ("/home/", "/var/lib"):
         assert word not in text, word
 
@@ -123,8 +180,8 @@ PLANTED = [
     ("client_cert_encoding", "pem", "client_cert_encoding", "pem-urlescaped, der-base64"),
     ("long_threshold", 0, "long_threshold", "1-512"),
     ("long_answers.platform", "glasses", "long_answers.platform", "another platform"),
-    ("edge.kind", "apache", "edge.kind", "nginx, caddy, other"),
-    ("edge.tls_dir", "relative/dir", "edge.tls_dir", "absolute path"),
+    ("signer.user", "Signer", "signer.user", "user name"),
+    ("signer.public_dir", "relative/dir", "signer.public_dir", "absolute path"),
     ("state_dir", "/srv/glasses\n", "state_dir", "absolute path"),
     ("meeting.language_hints", ["en", "en"], "meeting.language_hints", "must not repeat"),
 ]
@@ -149,8 +206,8 @@ def test_a_typo_is_a_warning_with_a_suggestion():
 
 
 def test_nested_unknown_key_suggestion():
-    assert gcfg.check({"edge": {"knid": "nginx"}}).warnings == [
-        "edge.knid: unknown key, ignored — did you mean edge.kind?"
+    assert gcfg.check({"signer": {"uesr": "signer"}}).warnings == [
+        "signer.uesr: unknown key, ignored — did you mean signer.user?"
     ]
 
 
@@ -188,7 +245,7 @@ def test_allow_all_settings_refused_without_echo(key, value):
 
 
 def test_unknown_key_values_are_never_shown():
-    result = gcfg.check({"token": SECRET, "edge": {"password": SECRET}})
+    result = gcfg.check({"token": SECRET, "signer": {"password": SECRET}})
     assert SECRET not in " ".join(result.errors + result.warnings)
 
 
@@ -198,7 +255,7 @@ def test_public_url_value_never_shown_but_its_size_is():
 
 
 def test_long_echo_is_truncated():
-    (msg,) = gcfg.check({"edge": {"kind": "x" * 500}}).errors
+    (msg,) = gcfg.check({"signer": {"user": "x" * 500}}).errors
     assert '"' + "x" * gcfg.ECHO_MAX_CHARS + '"...' in msg and "x" * (gcfg.ECHO_MAX_CHARS + 1) not in msg
 
 
@@ -213,7 +270,7 @@ def test_every_error_is_reported_once_per_path():
         "host": "0.0.0.0",
         "port": "x",
         "lanes": ["A", "b c"],
-        "edge": {"kind": 1},
+        "signer": {"user": 1},
         "long_answers": {"platform": "Glasses"},
         "meeting": {"max_minutes": 0},
     })
@@ -223,7 +280,7 @@ def test_every_error_is_reported_once_per_path():
         "port",
         "lanes[0]",
         "lanes[1]",
-        "edge.kind",
+        "signer.user",
         "long_answers.platform",
         "meeting.max_minutes",
     ])

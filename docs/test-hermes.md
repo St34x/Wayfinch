@@ -1,16 +1,43 @@
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 # Integration test instance (pinned Hermes Agent)
 
-`make test` needs no Hermes install: the plugin tests use fakes, and `make test-hermes-harness` tests the harness
-scripts with a fake `hermes`. This page is for the two things that do need a real Hermes Agent:
+`make test` needs no Hermes install: the plugin tests use fakes (the live ones are skipped without the venv below),
+and `make test-hermes-harness` tests the harness scripts with a fake `hermes`. This page is for the two things that do
+need a real Hermes Agent:
 
 - `make test-hermes-up` / `make test-hermes-down`: a real Hermes gateway with the minimal test platform
   `tools/test-hermes/glasses_min` (a WebSocket server on loopback) and the scripted mock LLM `tools/mock-llm/`;
-- the live tests in `hermes-plugin/tests/test_config_check_live.py` (`config check --live` against real Hermes code).
-  Without the venv below they are skipped, and the fakes in the same file still run.
+- the live tests in `hermes-plugin/tests/test_config_check_live.py`, `test_config_check_edges.py`,
+  `test_config_check_live_readonly.py`, `test_config_check_live_home_exact.py`, `test_config_check_live_names_exact.py`,
+  `test_config_check_allow_all.py`, `test_config_check_live_allow_all_launch_env.py`, `test_config_check_env_secrets.py`,
+  `test_config_check_live_secret_edges.py`, `test_config_check_live_timeouts_and_names_not_echoed.py`,
+  `test_config_check_names_and_masks.py`, `test_config_check_merge.py` and `test_config_check_env_overlay.py`
+  (`config check --live` against real Hermes code; `live_readonly` and `live_home_exact` also prove the scratch home
+  is unchanged by a run, `allow_all` that `allow_all_users` of a config fails the check, `env_secrets`,
+  `live_secret_edges`, `live_timeouts_and_names_not_echoed` and `names_and_masks` what a `.env` value may do to the
+  output, `live_names_exact` that names and arguments are never echoed, `merge` that the glasses platform is merged
+  as the gateway merges it, `env_overlay` that a `.env` makes the checker run no code). Without the venv below they
+  are skipped, and the fakes in the same file still run.
 
-Neither is part of `make test`. Both stay away from any Hermes install you use: every `hermes` call runs with a clean
-environment (`env -i`), `HOME` and `HERMES_HOME` point into the scratch directory, and all ports are on `127.0.0.1`.
+`make test-hermes-up` / `make test-hermes-down` are not part of `make test`: they need the pinned venv and run a real
+gateway. The live tests are part of `make test`: it runs the whole plugin suite (`test-plugin`), so they run when `.local/venv314`
+exists in the checkout (or in the main checkout of a worktree) and are skipped otherwise. Both stay away from any
+Hermes install you use: every `hermes` call runs with a clean environment (`env -i`), `HOME` and `HERMES_HOME` point
+into the scratch directory, and all ports are on `127.0.0.1`.
+
+What `config check --live` prints of a `.env` or of the process environment: a `.env` value of four or more
+characters is replaced wherever it appears in the output (shorter values would blank ordinary words). A routed
+profile name that is not a served profile and equals a value of a `.env` or of the process environment is not shown,
+and a timeout that came out of a `${VAR}` is described, not printed. What remains: a `.env` value of one to three
+characters, or a process-environment value, that sits inside a longer plain-identifier profile name (for example
+`pre-${CANARY}-suffix`) can be printed. Keep secrets out of the profile names of `gateway.profile_routes`.
+
+Two limits are known. A `.env` value that is padded with white space inside quotes (for example `NAME=" value "`) is
+not matched: Hermes strips and lower-cases a route profile name, while the mask and the hiding compare the raw value,
+so such a value used as a whole route profile name is printed in its stripped, lower-cased form. And whether a route
+name is printed or hidden tells a reader of the output whether that name equals some `.env` or process-environment
+value (one yes or no per run), so the output of `config check --live` is for the operator and must not be shown to
+people who can edit `config.yaml` but must not learn secrets.
 
 ## One-time setup
 

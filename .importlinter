@@ -21,6 +21,7 @@ include_external_packages = True
 name = Pure core imports no adapter, framework, Hermes package or stdlib I/O
 type = forbidden
 source_modules =
+    glasses.admin_protocol
     glasses.config_access
     glasses.config_core
     glasses.config_values
@@ -30,14 +31,23 @@ source_modules =
     glasses.envelope_scan
     glasses.envelope_text
     glasses.hermes_merge
+    glasses.signer_protocol
 forbidden_modules =
     # plugin adapters (listed before they exist, so a new adapter is covered when it is created)
     glasses.adapter
     glasses.admin
+    glasses.admin_common
+    glasses.admin_crl
+    glasses.admin_devices
+    glasses.admin_names
+    glasses.crl_check
+    glasses.enroll
     glasses.gate
+    glasses.hermes_env
     glasses.hermes_facts
     glasses.registry
     glasses.server
+    glasses.signer_client
     glasses.telegram
     # frameworks and Hermes packages (Hermes ships a top-level `tools` package; ours is not a package)
     aiohttp

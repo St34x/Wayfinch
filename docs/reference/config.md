@@ -5,7 +5,7 @@
 
 **Status: pre-alpha.** The plugin validates these settings (when the gateway loads it, and with `python -m glasses.admin config check`) but does not serve the glasses yet. A key marked **Planned** is accepted and validated and has no effect yet.
 
-Settings of the glasses platform plugin under gateway.platforms.glasses.extra in the Hermes config. glasses/config.py validates with this schema (types, ranges, patterns) plus the rules a schema cannot express (loopback host, public\_url normal form, absolute paths, port != bridge\_port, home\_lane in lanes). Keys the Hermes gateway itself injects are not ours and are skipped; access-control keys Hermes would act on are refused; any other unknown key is a warning. An unknown key is named in its message only when its name looks like a key name (1-32 characters, an ASCII letter first, then letters, '\_' and '-', at most 2 digits); any other name is shown as \<an unknown key of N characters\> (it could be a pasted secret or forge an output line). x-error / x-errors / x-hint are the user-facing messages ('glasses.\<path\>: \<x-error\> (got \<value\>) — \<x-hint\>'); a string value is shown only when x-echo is true and it contains neither '@' nor '://' (it could carry credentials); URL- and credential-capable keys (public\_url, meeting.endpoint, meeting.provider, meeting.llm.\*) are never echoed. x-status: planned marks a key whose feature is not built yet: it is accepted and validated but has no effect.
+Settings of the glasses platform plugin under gateway.platforms.glasses.extra in the Hermes config. glasses/config.py validates with this schema (types, ranges, patterns) plus the rules a schema cannot express (loopback host, public\_url normal form, absolute paths, port != bridge\_port, home\_lane in lanes). Keys the Hermes gateway itself injects are not ours and are skipped; access-control keys Hermes would act on are refused; any other unknown key is a warning. An unknown key that is a near-miss of a key at the same level (at most max(2, 20 % of that key's length) edits after lower-casing and reading '-' as '\_') gets a 'did you mean \<key\>?' hint, and its name is shown only then and only when it looks like a key name (1-32 characters, an ASCII letter first, then letters, '\_' and '-', at most 2 digits); any other name is shown as \<an unknown key of N characters\> (it could be a pasted secret or forge an output line). x-error / x-errors / x-hint are the user-facing messages ('glasses.\<path\>: \<x-error\> (got \<value\>) — \<x-hint\>'); a string value is shown only when x-echo is true and it contains neither '@' nor '://' (it could carry credentials); URL- and credential-capable keys (public\_url, meeting.endpoint, meeting.provider, meeting.llm.\*) are never echoed. x-status: planned marks a key whose feature is not built yet: it is accepted and validated but has no effect.
 
 Source: `hermes-plugin/glasses/config.schema.json`. Regenerate this file with `python3 tools/codegen/gen_config_docs.py`.
 
@@ -30,9 +30,10 @@ gateway:
         long_threshold: 280
         long_answers:
           platform: "telegram"
-        edge:
-          kind: "nginx"
-          tls_dir: "/etc/nginx/glasses"
+        signer:
+          socket: ""
+          user: ""
+          public_dir: ""
         meeting:
           enabled: false
           provider: "soniox"
@@ -54,7 +55,7 @@ gateway:
 | `host` | string | `"127.0.0.1"` | length ≤ 45 | `"127.0.0.1"` | **Planned** — accepted and validated, no effect yet. Bind address of the plugin's WebSocket listener: a loopback IP literal only; hostnames, localhost included, are refused. A TLS edge in front of it serves the public side. |
 | `port` | integer | `8765` | 1–65535 | `8765` | **Planned** — accepted and validated, no effect yet. Loopback WebSocket port the TLS edge proxies /ws to. |
 | `bridge_port` | integer | `8766` | 1–65535 | `8766` | **Planned** — accepted and validated, no effect yet. Loopback port of the phone bridge; must differ from port. |
-| `state_dir` | string or null | `null` | length ≤ 4096 | `null` | **Planned** — accepted and validated, no effect yet. Absolute directory for the plugin state (device registry, device CA, outbox); empty or null = $HERMES\_HOME/glasses. |
+| `state_dir` | string or null | `null` | length ≤ 4096 | `null` | Absolute directory for the plugin state; empty or null = $HERMES\_HOME/glasses. Used today by glasses-admin crl --check (its rollback record crl-seen.json, the highest CRL number seen per CA), config check --live and glasses-admin revoke (it connects to the plugin's admin socket admin.sock here; the server is planned); the plugin keeps no CA key and no CRL here; the device registry and outbox (planned) will live here too. |
 | `public_url` | string | `""` | length ≤ 2048 | `"wss://glasses.example.com/ws"` | **Planned** — accepted and validated, no effect yet. Public wss:// URL the app connects to (carried in the enrolment QR); stored normalised. |
 | `lanes` | list of string | `["assistant"]` | items ≤ 32; unique; each: length ≤ 32; pattern `^[a-z][a-z0-9_-]{0,31}$`; no line breaks | `["assistant"]` | **Planned** — accepted and validated, no effect yet. Global lane allowlist (plus per-device lanes); \[\] = per-device lanes only. At most 32 (= protocol welcome.lanes maxItems). |
 | `home_lane` | string | `"assistant"` | length ≤ 40; pattern `^(?:(?:glasses:)?[a-z][a-z0-9_-]{0,31})?$`; no line breaks | `"assistant"` | **Planned** — accepted and validated, no effect yet. Lane of the home channel (glasses:\<lane\>); empty = no home channel. Must be one of lanes when lanes is not empty. |
@@ -63,12 +64,13 @@ gateway:
 | `long_threshold` | integer | `280` | 1–512 | `280` | **Planned** — accepted and validated, no effect yet. Characters (1-512 = msg.out.text 2048 B // 4) above which an answer goes to the long-answer platform; UTF-8 bytes \> 2048 also count as long. |
 | `long_answers` | mapping or null | `{"platform": "telegram"}` | — | — | **Planned** — accepted and validated, no effect yet. Where long answers go. |
 | `long_answers.platform` | string | `"telegram"` | length ≤ 32; pattern `^[a-z][a-z0-9_-]{0,31}$`; not `"glasses"` | `"telegram"` | **Planned** — accepted and validated, no effect yet. Hermes platform that receives long answers (never glasses itself). |
-| `edge` | mapping or null | `{"kind": "nginx", "tls_dir": ""}` | — | — | **Planned** — accepted and validated, no effect yet. Your TLS edge, for glasses-admin hints. |
-| `edge.kind` | string | `"nginx"` | one of `"nginx"`, `"caddy"`, `"other"` | `"nginx"` | **Planned** — accepted and validated, no effect yet. Software of your TLS edge; selects the reload hint glasses-admin prints. |
-| `edge.tls_dir` | string or null | `""` | length ≤ 4096 | `"/etc/nginx/glasses"` | **Planned** — accepted and validated, no effect yet. Absolute directory the edge reads the device CA + CRL from; empty = unset. |
+| `signer` | mapping or null | `{"socket": "", "user": "", "public_dir": ""}` | — | — | The device-CA signer: a separate local service (planned, built outside this repository) that the plugin asks to issue and revoke device certificates. Used today: socket and user by glasses-admin crl and glasses-admin revoke, public\_dir by glasses-admin crl --check. |
+| `signer.socket` | string or null | `""` | length ≤ 107 | `""` | Absolute path of the signer's unix socket, at most 107 bytes UTF-8 (the AF\_UNIX limit, not characters); the plugin refuses it unless it is a socket owned by signer.user; empty = unset. |
+| `signer.user` | string or null | `""` | pattern `^([a-z_][a-z0-9_-]{0,31})?$`; no line breaks | `""` | System user the signer runs as: the owner of its socket and the peer uid the plugin requires; not root and not the plugin's own user; empty = unset. |
+| `signer.public_dir` | string or null | `""` | length ≤ 4096 | `""` | Absolute directory where the signer publishes device-ca.pem, devices-crl.pem and devices.json; glasses-admin crl --check reads the first two; empty = unset. |
 | `meeting` | mapping or null | `{}` | — | — | **Planned** — accepted and validated, no effect yet. Settings of meeting mode. Off unless enabled here and per device. |
 | `meeting.enabled` | boolean | `false` | — | `false` | **Planned** — accepted and validated, no effect yet. |
-| `meeting.provider` | string | `"soniox"` | one of `"soniox"`, `"deepgram"`, `"speechmatics"` | `"soniox"` | **Planned** — accepted and validated, no effect yet. the key comes from the profile .env under the provider's variable name |
+| `meeting.provider` | string | `"soniox"` | one of `"soniox"`, `"deepgram"`, `"speechmatics"` | `"soniox"` | **Planned** — accepted and validated, no effect yet. the key stays on the server: the plugin reads it from the provider's environment variable in the gateway environment (supply it from a secret manager); the phone only gets short-lived tokens |
 | `meeting.endpoint` | string | `""` | length ≤ 253; pattern `^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*)?$`; no line breaks | `"stt.example.com"` | **Planned** — accepted and validated, no effect yet. Provider host (region); empty = the provider default. |
 | `meeting.language_hints` | list of string | `[]` | items ≤ 8; unique; each: length ≤ 35; pattern `^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$`; no line breaks | `[]` | **Planned** — accepted and validated, no effect yet. 0-8 BCP 47 tags; \[\] = auto-detect (generic default). |
 | `meeting.transcript_days` | integer | `30` | 0–3650 | `30` | **Planned** — accepted and validated, no effect yet. days transcripts are kept |

@@ -194,10 +194,10 @@ def test_each_key_missing_falls_back_to_default(key):
 
 
 def test_partial_nested_sections_merge_defaults():
-    cfg = gcfg.load({"edge": {"tls_dir": "/srv/tls"}, "long_answers": {}})
-    assert (cfg.edge_kind, cfg.edge_tls_dir, cfg.long_answers_platform) == ("nginx", "/srv/tls", "telegram")
-    cfg = gcfg.load({"edge": None, "long_answers": None})
-    assert (cfg.edge_kind, cfg.long_answers_platform) == ("nginx", "telegram")
+    cfg = gcfg.load({"signer": {"public_dir": "/srv/pub"}, "long_answers": {}})
+    assert (cfg.signer_user, cfg.signer_public_dir, cfg.long_answers_platform) == ("", "/srv/pub", "telegram")
+    cfg = gcfg.load({"signer": None, "long_answers": None})
+    assert (cfg.signer_public_dir, cfg.long_answers_platform) == ("", "telegram")
 
 
 @pytest.mark.parametrize(
@@ -234,9 +234,9 @@ def test_partial_nested_sections_merge_defaults():
         ("long_answers", "telegram"),
         ("long_answers", ["telegram"]),
         ("long_answers", 1),
-        ("edge", "nginx"),
-        ("edge", ["nginx"]),
-        ("edge", 1),
+        ("signer", "signer"),
+        ("signer", ["signer"]),
+        ("signer", 1),
     ],
 )
 def test_wrong_types_rejected_with_key_named(key, value, no_allow_all):
@@ -248,10 +248,10 @@ def test_wrong_types_rejected_with_key_named(key, value, no_allow_all):
 @pytest.mark.parametrize(
     "section,key,value",
     [
-        ("edge", "kind", None),
-        ("edge", "kind", ["nginx"]),
-        ("edge", "tls_dir", 1),
-        ("edge", "tls_dir", "rel/dir"),
+        ("signer", "user", 1),
+        ("signer", "user", ["signer"]),
+        ("signer", "public_dir", 1),
+        ("signer", "public_dir", "rel/dir"),
         ("long_answers", "platform", None),
         ("long_answers", "platform", ["telegram"]),
         ("long_answers", "platform", "Telegram"),
@@ -288,7 +288,7 @@ def test_validate_config_with_odd_platform_configs(no_allow_all):
 
 
 def test_validate_config_does_not_mutate_extra(no_allow_all):
-    extra = {"port": 18700, "edge": {"kind": "caddy"}, "lanes": ["work"], "home_lane": "work"}
+    extra = {"port": 18700, "long_answers": {"platform": "matrix"}, "lanes": ["work"], "home_lane": "work"}
     snapshot = repr(extra)
     assert glasses.validate_config(pc(extra)) is True
     assert repr(extra) == snapshot
@@ -299,8 +299,8 @@ def test_defaults_are_not_shared_mutable_state():
     assert isinstance(cfg.lanes, tuple)
     with pytest.raises(dataclasses.FrozenInstanceError):
         cfg.port = 1  # frozen dataclass
-    gcfg.check({"edge": {"kind": "caddy"}})
-    assert gcfg.DEFAULTS["edge"] == {"kind": "nginx", "tls_dir": ""}
+    gcfg.check({"long_answers": {"platform": "matrix"}})
+    assert gcfg.DEFAULTS["long_answers"] == {"platform": "telegram"}
 
 
 # --------------------------------------------------------------------------------------------
@@ -367,3 +367,12 @@ def test_contract_empty_query_or_fragment_marker_accepted():
 def test_long_answers_platform_must_not_be_glasses_itself():
     # Long answers are forwarded to ANOTHER platform; glasses -> glasses would loop.
     assert errs({"long_answers": {"platform": "glasses"}}, "long_answers.platform")
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [("user", "signer\n"), ("user", "signer\r\n"), ("user", "signer\u2028"), ("socket", "/run/signer.sock\n")],
+)
+def test_a_signer_string_key_with_a_line_break_is_refused(key, value):
+    # Python's re "$" matches before a final newline: the pattern alone let "signer\n" through.
+    assert errs({"signer": {key: value}}, f"signer.{key}"), f"{value!r} accepted"

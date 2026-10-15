@@ -12,8 +12,9 @@
 # DIR, when given, must be the top of a git work tree (a subdirectory is refused with exit 2, so a
 # gitignored subdir is never reported clean). Without DIR the work tree containing the current directory
 # is scanned from its top.
-# Config: <repo top>/.gitleaks.toml. Known false positives: add the "Fingerprint:" line of the report
-# to <repo top>/.gitleaksignore (tree fingerprints are repo-relative: path:rule:line).
+# Config: <repo top>/.gitleaks.toml. Known false positives: add the "Fingerprint:" line of the report to
+# <repo top>/.gitleaksignore, or (private fingerprints) <repo top>/.team/gitleaksignore; both are read.
+# Each run logs "secret-scan: N ignore entries from <files>" to stderr (a count, never the entries).
 #
 # Env: GITLEAKS_CACHE_DIR  where the verified release archive is cached
 #                          (default: <repo top>/.local/gitleaks, gitignored)
@@ -119,7 +120,7 @@ ARCHIVE="$CACHE/gitleaks_${GITLEAKS_VERSION}_${PLAT}.tar.gz"
 
 TMP=$(mktemp -d) || die "mktemp failed"
 DL=""
-trap 'rm -rf "$TMP"; [ -z "$DL" ] || rm -f "$DL"' EXIT
+trap 'rm -rf "$TMP" || :; [ -z "$DL" ] || rm -f "$DL" || :' EXIT # a failed cleanup must not change the exit code (set -e)
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
@@ -150,7 +151,25 @@ fi
 LEAK_RC=3
 set -- --no-banner --redact --verbose --exit-code "$LEAK_RC"
 [ -f "$REPO/.gitleaks.toml" ] && set -- "$@" --config "$REPO/.gitleaks.toml"
-[ -f "$REPO/.gitleaksignore" ] && set -- "$@" --gitleaks-ignore-path "$REPO/.gitleaksignore"
+# Known false positives: the public .gitleaksignore plus the private one under the team folder (a fingerprint
+# of a finding in a private file names that file, so it cannot live in the exported tree). Merged into one file.
+IGN="$TMP/gitleaksignore"
+printf '' >"$IGN" || die "cannot create $IGN"
+USED=""
+for f in "$REPO/.gitleaksignore" "$REPO/.team/gitleaksignore"; do
+	if [ -f "$f" ]; then
+		{ cat "$f" && echo; } >>"$IGN" || die "cannot read $f"
+		USED="$USED ${f#"$REPO"/}"
+	fi
+done
+if [ -n "$USED" ]; then
+	# Say that fingerprints are applied and how many (a count, never the entries), so a growing ignore set
+	# shows up in the log of every run.
+	COUNT=$(awk '$0 !~ /^[ 	\r]*$/ && $0 !~ /^[ 	]*#/ { n++ } END { print n + 0 }' "$IGN") ||
+		die "cannot count the entries of the ignore files"
+	echo "secret-scan: $COUNT ignore entries from$USED" >&2
+fi
+[ -s "$IGN" ] && set -- "$@" --gitleaks-ignore-path "$IGN"
 
 rc=0
 gl() { # gl <what> <gitleaks args...>: 0 clean, sets rc=1 on leaks, dies on any other failure
@@ -177,7 +196,7 @@ if [ "$MODE" = all ] || [ "$MODE" = tree ]; then
 	[ -s "$TMP/files" ] || die "no files to scan in $REPO - refusing to report an empty scan as clean"
 	(cd "$REPO" && tar --null -T "$TMP/files" -cf "$TMP/tree.tar") ||
 		die "cannot copy the working tree of $REPO (unreadable file?) - scan not run"
-	mkdir "$TMP/tree"
+	mkdir "$TMP/tree" || die "cannot create $TMP/tree"
 	tar -xf "$TMP/tree.tar" -C "$TMP/tree" || die "cannot unpack the working tree copy"
 	rm -f "$TMP/tree.tar"
 	echo "secret-scan: working tree of $REPO" >&2

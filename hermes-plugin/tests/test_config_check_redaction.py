@@ -46,8 +46,9 @@ def test_echo_fields_are_the_expected_names_and_paths():
         "client_cert_header",
         "client_cert_encoding",
         "long_answers.platform",
-        "edge.kind",
-        "edge.tls_dir",
+        "signer.socket",
+        "signer.user",
+        "signer.public_dir",
         "meeting.language_hints",
     }
 

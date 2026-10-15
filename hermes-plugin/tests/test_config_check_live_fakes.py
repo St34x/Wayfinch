@@ -67,7 +67,7 @@ def test_unset_stt_provider_is_a_warning_not_an_error(tmp_path):
 def test_profile_problems_returns_errors_and_warnings_apart():
     report = admin.profile_problems("work", replace(GOOD, stt_provider="", clarify_timeout=5), ["fr"])
     assert len(report.warnings) == 1 and len(report.errors) == 1
-    assert "clarify timeout resolves to 5" in report.errors[0]
+    assert "clarify timeout resolves to a positive number" in report.errors[0]
 
 
 # -- (d) the Hermes home of --live ------------------------------------------------------------------------

@@ -52,7 +52,6 @@ STDLIB_ALLOWLIST: dict[str, str] = {
     "dataclasses": "value types",
     "datetime": "date/time values; reading the clock (.now/.utcnow/.today) is banned by check (b)",
     "decimal": "exact arithmetic",
-    "difflib": "pure string similarity (close-match hints for unknown keys)",
     "enum": "enumerations",
     "functools": "pure higher-order helpers",
     "hashlib": "digests of bytes",
