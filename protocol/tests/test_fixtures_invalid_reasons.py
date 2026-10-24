@@ -47,6 +47,17 @@ def _del(key):
 
 # file -> (error path every schema error must be at, minimal correction or None when no single-field fix exists)
 CASES = {
+    "ack-up-to-seq-negative.json": ("body/upToSeq", _set(["body", "upToSeq"], 0)),
+    "ack-up-to-seq-string.json": ("body/upToSeq", _set(["body", "upToSeq"], 42)),
+    "ack-up-to-seq-too-large.json": ("body/upToSeq", _set(["body", "upToSeq"], 9007199254740991)),
+    "body-array.json": ("body", _set(["body"], {})),
+    "body-null.json": ("body", _set(["body"], {})),
+    "body-optional-null.json": ("body/langHint", lambda f: f["body"].pop("langHint")),
+    "clarify-dismiss-string.json": ("body/dismiss", _set(["body", "dismiss"], True)),
+    "corr-null.json": ("corr", _del("corr")),
+    "ping-body-extra-key.json": ("body", _drop_extra(lambda f: f["body"])),
+    "seq-string.json": ("seq", _set(["seq"], 7)),
+    "type-number.json": ("type", _set(["type"], "ping")),
     "approval-summary-bidi.json": ("body/summary", _set(["body", "summary"], "ok")),
     "bad-base64-alphabet.json": ("body/chunk", _set(["body", "chunk"], "AAAA")),
     "bad-base64-length.json": ("body/chunk", _set(["body", "chunk"], "AAAA")),
@@ -71,6 +82,7 @@ CASES = {
     "oversize-msg-out-text.json": ("body/text", _set(["body", "text"], "x")),
     "seq-on-msg-in.json": ("", _del("seq")),
     "seq-on-ping.json": ("", _del("seq")),
+    "seq-on-welcome.json": ("", _del("seq")),
     "unknown-type.json": ("type", None),
     "wrong-version-2.json": ("v", _set(["v"], 1)),
     "wrong-version-string.json": ("v", _set(["v"], 1)),
@@ -126,7 +138,7 @@ def test_byte_counts_in_file_names_recomputed(kind):
 
 
 def test_index_files_unique_and_no_stray_files():
-    names = [e["file"] for k in ("valid", "invalid", "codec-valid", "codec-invalid") for e in INDEX[k]]
+    names = [e["file"] for k in ("valid", "invalid", "codec-valid", "codec-invalid", "raw-invalid") for e in INDEX[k]]
     assert len(names) == len(set(names))
     for sub in FIX.iterdir():
         if sub.is_dir():

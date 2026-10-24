@@ -22,8 +22,8 @@ PLATFORM_NAME = "glasses"
 LANE_RE = re.compile(r"[a-z][a-z0-9_-]{0,31}")
 PLATFORM_RE = LANE_RE
 # Keys the gateway itself puts into PlatformConfig.extra at the pinned Hermes: not ours, never
-# warned about (gateway/run_adapters.py:1855 group/thread_sessions_per_user;
-# gateway/config_loader.py:161,373 ``_enabled_explicit``).
+# warned about (gateway/run_adapters.py:1890 group/thread_sessions_per_user;
+# gateway/config_loader.py:162,375 ``_enabled_explicit``).
 HERMES_EXTRA_KEYS = frozenset({"group_sessions_per_user", "thread_sessions_per_user", "_enabled_explicit"})
 # = protocol welcome.lanes maxItems (protocol/envelope.schema.json; contract test_protocol_bounds.py).
 MAX_LANES = 32
@@ -37,8 +37,7 @@ MAX_LONG_THRESHOLD = MSG_OUT_TEXT_MAX_BYTES // 4  # 512
 
 # Equal to the schema's "default" values (test_config_schema.py).
 DEFAULTS: dict[str, Any] = {
-    "host": "127.0.0.1",
-    "port": 8765,
+    "edge": {"socket": "", "user": ""},
     "bridge_port": 8766,
     "state_dir": None,
     "public_url": "",
@@ -68,8 +67,8 @@ MISSING = object()
 
 @dataclass(frozen=True)
 class GlassesConfig:
-    host: str
-    port: int
+    edge_socket: str
+    edge_user: str
     bridge_port: int
     state_dir: str | None
     public_url: str
@@ -255,13 +254,9 @@ def strip_lane_prefix(value: str) -> str:
 
 
 def relation_errors(own: Mapping[str, Any], failed: set[str], schema: Mapping[str, Any]) -> dict[str, str]:
-    """``bridge_port`` differs from ``port``; ``home_lane`` is one of ``lanes`` unless ``lanes`` is ``[]``."""
+    """``home_lane`` is one of ``lanes`` unless ``lanes`` is ``[]``."""
     v = {**DEFAULTS, **own}
     found: dict[str, str] = {}
-    if not (touched("port", failed) or touched("bridge_port", failed)) and v["port"] == v["bridge_port"]:
-        found["bridge_port"] = message(
-            "bridge_port", schema_node(schema, ("bridge_port",)), v["bridge_port"], "x-differ"
-        )
     if touched("lanes", failed) or touched("home_lane", failed):
         return found
     home = strip_lane_prefix(v["home_lane"])

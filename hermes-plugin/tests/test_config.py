@@ -6,7 +6,6 @@ No Hermes import anywhere (enforced by conftest.py).
 
 from __future__ import annotations
 
-import dataclasses
 from types import SimpleNamespace
 
 import pytest
@@ -25,10 +24,9 @@ def pc(extra=None, enabled=True):
 # --------------------------------------------------------------------------------------------
 
 
-def test_defaults_are_generic_and_loopback():
+def test_defaults_are_generic():
     cfg = gcfg.load({})
-    assert cfg.host == "127.0.0.1"
-    assert cfg.port == 8765
+    assert cfg.edge_socket == "" and cfg.edge_user == ""
     assert cfg.bridge_port == 8766
     assert cfg.state_dir is None
     assert cfg.public_url == ""
@@ -57,81 +55,19 @@ def test_home_chat_id():
 
 
 # --------------------------------------------------------------------------------------------
-# host: loopback only
+# bridge_port
 # --------------------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("host", ["127.0.0.1", "127.0.0.53", "::1"])
-def test_loopback_host_accepted(host, no_allow_all):
-    assert gcfg.load({"host": host}).host == host
-    assert glasses.validate_config(pc({"host": host})) is True
+@pytest.mark.parametrize("value", [0, -1, 65536, "8766", True, 8766.0, None])
+def test_bad_bridge_ports_rejected(value):
+    errors = gcfg.check({"bridge_port": value}).errors
+    assert any(e.startswith("bridge_port:") for e in errors), errors
 
 
-@pytest.mark.parametrize(
-    "host",
-    [
-        "0.0.0.0",
-        "::",
-        "192.168.1.10",
-        "10.0.0.1",
-        "203.0.113.5",
-        "2001:db8::1",
-        "::ffff:127.0.0.1",
-        "glasses.example.com",
-        "localhost",
-        "",
-        "   ",
-        127,
-        None,
-    ],
-)
-def test_non_loopback_host_rejected(host, no_allow_all):
-    errors = gcfg.check({"host": host}).errors
-    assert any(e.startswith("host:") for e in errors), errors
-    with pytest.raises(gcfg.ConfigError):
-        gcfg.load({"host": host})
-    assert glasses.validate_config(pc({"host": host})) is False
-
-
-@pytest.mark.parametrize(
-    "host,expected",
-    [
-        ("127.0.0.1", True),
-        ("127.255.255.254", True),
-        ("::1", True),
-        ("0.0.0.0", False),
-        ("::", False),
-        ("localhost", False),
-        ("8.8.8.8", False),
-        (None, False),
-    ],
-)
-def test_is_loopback_host(host, expected):
-    assert gcfg.is_loopback_host(host) is expected
-
-
-# --------------------------------------------------------------------------------------------
-# ports
-# --------------------------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("key", ["port", "bridge_port"])
-@pytest.mark.parametrize("value", [0, -1, 65536, "8765", True, 8765.0, None])
-def test_bad_ports_rejected(key, value):
-    other = {"port": 9001, "bridge_port": 9002}
-    other[key] = value
-    errors = gcfg.check(other).errors
-    assert any(e.startswith(f"{key}:") for e in errors), errors
-
-
-def test_port_and_bridge_port_must_differ():
-    errors = gcfg.check({"port": 9000, "bridge_port": 9000}).errors
-    assert any("bridge_port" in e and "differ" in e for e in errors), errors
-
-
-def test_valid_ports():
-    cfg = gcfg.load({"port": 18700, "bridge_port": 1})
-    assert (cfg.port, cfg.bridge_port) == (18700, 1)
+def test_valid_bridge_ports():
+    assert gcfg.load({"bridge_port": 18700}).bridge_port == 18700
+    assert gcfg.load({"bridge_port": 1}).bridge_port == 1
 
 
 # --------------------------------------------------------------------------------------------
@@ -281,18 +217,10 @@ def test_long_answers_platform():
         assert any(e.startswith("long_answers") for e in gcfg.check({"long_answers": bad}).errors)
 
 
-@pytest.mark.parametrize(
-    "edge",
-    [{"kind": "nginx", "tls_dir": "/etc/nginx/glasses"}, {"kind": "apache", "tls_dir": "relative"}, "nginx", None],
-)
-def test_removed_edge_section_is_an_unknown_key_not_an_error(edge):
-    # The edge section is gone: the root-side installer owns the edge copy and its paths, no plugin code reads them.
-    result = gcfg.check({"edge": edge})
-    assert result.errors == []
-    assert result.warnings == ["<an unknown key of 4 characters>: unknown key, ignored"]
-    assert gcfg.load({"edge": edge}) == gcfg.load({})
-    assert "edge" not in gcfg.DEFAULTS and "edge" not in gcfg.schema()["properties"]
-    assert not [f for f in dataclasses.fields(gcfg.GlassesConfig) if f.name.startswith("edge")]
+@pytest.mark.parametrize("edge", ["nginx", 5, "/run/edge.sock"])
+def test_edge_section_must_be_a_mapping(edge):
+    # The old edge section (kind, tls_dir) is gone; the new one holds socket and user (test_config_edge.py).
+    assert any(e.startswith("edge:") for e in gcfg.check({"edge": edge}).errors)
 
 
 def test_unknown_nested_keys_warn():
@@ -303,33 +231,33 @@ def test_unknown_nested_keys_warn():
 
 
 def test_unknown_keys_warn_but_stay_valid(no_allow_all):
-    result = gcfg.check({"port": 18700, "token_file": "/x", "spike_log": "/y"})
+    result = gcfg.check({"bridge_port": 18700, "token_file": "/x", "spike_log": "/y"})
     assert result.errors == []
     assert result.config is not None
     assert "<an unknown key of 10 characters>: unknown key, ignored" in result.warnings
-    assert glasses.validate_config(pc({"port": 18700, "token_file": "/x"})) is True
+    assert glasses.validate_config(pc({"bridge_port": 18700, "token_file": "/x"})) is True
 
 
 def test_keys_injected_by_hermes_are_silent():
     # The gateway sets these in every PlatformConfig.extra before building the adapter
-    # (gateway/run_adapters.py:_instantiate_adapter at a4648c5f58).
+    # (gateway/run_adapters.py:_instantiate_adapter at d923a5eb48).
     result = gcfg.check({"group_sessions_per_user": True, "thread_sessions_per_user": False})
     assert result.errors == [] and result.warnings == []
 
 
 def test_extra_must_be_mapping(no_allow_all):
-    assert gcfg.check(["host"]).errors
-    assert glasses.validate_config(pc(["host"])) is False
+    assert gcfg.check(["lanes"]).errors
+    assert glasses.validate_config(pc(["lanes"])) is False
 
 
 def test_all_errors_reported_at_once():
-    errors = gcfg.check({"host": "0.0.0.0", "port": 0, "long_answers": {"platform": "glasses"}}).errors
+    errors = gcfg.check({"bridge_port": 0, "edge": {"user": "root"}, "long_answers": {"platform": "glasses"}}).errors
     keys = {e.split(":", 1)[0] for e in errors}
-    assert {"host", "port", "long_answers.platform"} <= keys
+    assert {"bridge_port", "edge.user", "long_answers.platform"} <= keys
 
 
 def test_config_error_carries_errors():
     with pytest.raises(gcfg.ConfigError) as exc:
-        gcfg.load({"host": "0.0.0.0", "port": 0})
+        gcfg.load({"bridge_port": 0, "long_threshold": 0})
     assert len(exc.value.errors) == 2
-    assert "host:" in str(exc.value)
+    assert "bridge_port:" in str(exc.value)

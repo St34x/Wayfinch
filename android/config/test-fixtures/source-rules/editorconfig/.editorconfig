@@ -1,0 +1,3 @@
+# SPDX-License-Identifier: Apache-2.0
+# The only .editorconfig the stray finder accepts in this fixture tree (stands for android/.editorconfig).
+root = true

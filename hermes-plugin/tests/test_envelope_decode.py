@@ -24,6 +24,7 @@ from glasses.envelope import (
     decode,
     error_frame,
 )
+from glasses.envelope_rules import UNNUMBERED_S2D
 
 PROTOCOL = Path(__file__).resolve().parents[2] / "protocol"
 SCHEMA = json.loads((PROTOCOL / "envelope.schema.json").read_text(encoding="utf-8"))
@@ -256,10 +257,11 @@ def test_bytes_that_are_not_utf8_are_rejected() -> None:
 
 
 def test_every_valid_fixture_without_seq_decodes_to_itself() -> None:
-    # Frames with seq travel S→D: decode (the server side) refuses them by direction (test_envelope_rules.py).
+    # Frames with seq travel S→D: decode (the server side) refuses them by direction (test_envelope_rules.py), and so
+    # it does a welcome, which has none (test_envelope_welcome.py).
     for path in sorted((PROTOCOL / "fixtures" / "valid").glob("*.json")):
         frame = json.loads(path.read_text(encoding="utf-8"))
-        if "seq" not in frame:
+        if "seq" not in frame and frame["type"] not in UNNUMBERED_S2D:
             assert decode(path.read_bytes(), VALIDATOR) == frame, path.name
 
 

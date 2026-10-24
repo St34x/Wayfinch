@@ -2,8 +2,9 @@
 """``config check --live`` against real Hermes: edges of what a ``.env`` value, a config-supplied name, an
 installed-but-unrouted profile and a read-only home may do to the output and to the home.
 
-A ``.env`` value of fewer than four characters is not masked as text (it would blank ordinary words): it is hidden
-where it is the whole routed profile name, and a timeout number is never printed. Inside a longer name it is not.
+No ``.env`` or process-environment value is masked or compared with config text (the output would depend on it,
+see test_config_check_live_output_independent_of_env.py): a route to an unserved profile is a placeholder whatever
+its name holds, in a longer name or not, and a timeout number is never printed.
 """
 
 from __future__ import annotations
@@ -33,6 +34,10 @@ def _route_to(ref: str):
     return edit
 
 
+def _process(where: str, value: str):
+    return {"C": value} if where == "process" else None
+
+
 def _telegram_list(ref: str):
     return lambda config: config["platform_toolsets"].__setitem__("telegram", ["web", ref])
 
@@ -51,7 +56,10 @@ def test_real_live_a_dotenv_value_in_the_telegram_tool_list_is_not_printed():
         home, user = _fresh(tmp)
         _edit(home, _telegram_list("${CANARY}"))
         proc = _run(home, user, f"CANARY={CANARY}\n")
-    assert proc.returncode == admin.EXIT_ERRORS and "missing on glasses: " in proc.stdout, proc.stdout
+    assert (
+        proc.returncode == admin.EXIT_OK
+        and "platform_toolsets: uses an environment reference, not checked" in proc.stdout
+    ), proc.stdout
     _assert_absent(proc, CANARY)
 
 
@@ -61,11 +69,14 @@ def test_real_live_other_reference_forms_of_a_dotenv_value_in_a_route_are_not_pr
         home, user = _fresh(tmp)
         _edit(home, _route_to(ref))
         proc = _run(home, user, f"CANARY={CANARY}\n")
-    assert "is routed to profile" in proc.stdout and proc.stderr == "", (proc.stdout, proc.stderr)
+    assert "gateway.profile_routes: uses an environment reference, not checked" in proc.stdout and proc.stderr == "", (
+        proc.stdout,
+        proc.stderr,
+    )
     _assert_absent(proc, CANARY)
 
 
-def test_real_live_a_dotenv_value_that_is_a_plain_word_blanks_that_word_but_not_the_verdict():
+def test_real_live_a_dotenv_value_that_is_a_plain_word_blanks_nothing():
     with _scratch() as tmp:
         home, user = _fresh(tmp)
         proc = _run(home, user, "GATEWAY_ALLOW_ALL_USERS=true\nWORD=profile\nLEVEL=error\nSTATE=FAILED\n")
@@ -73,7 +84,7 @@ def test_real_live_a_dotenv_value_that_is_a_plain_word_blanks_that_word_but_not_
     assert proc.returncode == admin.EXIT_ERRORS, proc.stdout
     assert lines[-1] == "config check: FAILED (2 error(s), 0 warning(s))", lines
     assert lines[0].startswith("error: allow-all gate: active scope: "), lines
-    assert lines[1].startswith("error: allow-all gate: <.env value> default: "), lines
+    assert lines[1].startswith("error: allow-all gate: profile default: "), lines
 
 
 @pytest.mark.parametrize("secret", ["abc", "Zq9"])
@@ -91,8 +102,26 @@ def test_real_live_a_numeric_dotenv_value_resolved_as_a_timeout_is_not_printed(s
         home, user = _fresh(tmp)
         _edit(home, lambda c: c["agent"].__setitem__("clarify_timeout", "${PIN}"))
         proc = _run(home, user, f"PIN={secret}\n")
-    assert "clarify timeout resolves to" in proc.stdout, proc.stdout
+    assert "agent.clarify_timeout: uses an environment reference, not checked" in proc.stdout, proc.stdout
     _assert_absent(proc, secret.lstrip("+0"))
+
+
+@pytest.mark.parametrize("where", ["dotenv", "process"])
+@pytest.mark.parametrize("value", ["abc", "abcdef"])
+def test_real_live_a_value_of_any_length_is_not_printed_inside_a_longer_name(value, where):
+    def run(secret):
+        with _scratch() as tmp:
+            home, user = _fresh(tmp)
+            _edit(home, _route_to("pre-${C}-suf"))
+            return _run(home, user, f"C={secret}\n" if where == "dotenv" else "", env_extra=_process(where, secret))
+
+    proc, other = run(value), run("xyz" if len(value) == 3 else "ghijkl")
+    assert (
+        proc.returncode == admin.EXIT_OK
+        and "gateway.profile_routes: uses an environment reference, not checked" in proc.stdout
+    )
+    assert (proc.returncode, proc.stdout, proc.stderr) == (other.returncode, other.stdout, other.stderr)
+    _assert_absent(proc, f"pre-{value}", f"{value}-suf")
 
 
 def test_real_live_a_process_environment_value_as_a_route_profile_is_not_printed():
@@ -123,12 +152,14 @@ def test_real_live_an_empty_top_level_key_falls_back_to_the_gateway_one():
     assert proc.returncode == admin.EXIT_ERRORS and proc.stdout.count("error: allow-all gate: ") == 2, proc.stdout
 
 
-def test_real_live_a_grant_read_through_a_dotenv_reference_counts():
+@pytest.mark.parametrize("value", ["true", "false"])
+def test_real_live_a_grant_written_as_a_reference_is_an_error_whatever_the_value(value):
     with _scratch() as tmp:
         home, user = _fresh(tmp)
         _edit(home, lambda c: c.__setitem__("allow_all_users", "${GRANT}"))
-        proc = _run(home, user, "GRANT=true\n")
-    assert proc.returncode == admin.EXIT_ERRORS and proc.stdout.count("error: allow-all gate: ") == 2, proc.stdout
+        proc = _run(home, user, f"GRANT={value}\n")
+    assert proc.returncode == admin.EXIT_ERRORS and proc.stdout.count("error: allow-all gate: ") == 1, proc.stdout
+    assert "allow_all_users in config.yaml uses an environment reference, not checked" in proc.stdout, proc.stdout
 
 
 def test_real_live_a_grant_only_in_a_routed_profile_config_is_not_the_gateways_grant():
@@ -146,14 +177,28 @@ def _unrouted_profile(home: Path, **gateway) -> Path:
     return other
 
 
-@UNROUTED
-def test_real_live_an_allow_all_dotenv_of_an_unrouted_installed_profile_is_still_an_error(gateway):
+def test_real_live_an_allow_all_dotenv_of_an_unrouted_served_profile_is_still_an_error():
     with _scratch() as tmp:
         home, user = _fresh(tmp)
-        (_unrouted_profile(home, **gateway) / ".env").write_text("GATEWAY_ALLOW_ALL_USERS=true\n")
+        (_unrouted_profile(home) / ".env").write_text("GATEWAY_ALLOW_ALL_USERS=true\n")
         proc = _real_live(home, user)
     assert proc.returncode == admin.EXIT_ERRORS, proc.stdout
     assert "error: allow-all gate: profile other: GATEWAY_ALLOW_ALL_USERS is enabled" in proc.stdout, proc.stdout
+
+
+@pytest.mark.parametrize("kind", ["standalone", "parked"])
+def test_real_live_an_allow_all_dotenv_of_a_standalone_or_parked_profile_is_not_read(kind):
+    # Only the profiles the gateway serves can authorise a glasses event: Hermes skips a standalone profile
+    # (``gateway.standalone``) and a parked one (the ``gateway.parked`` marker file), and so does the gate.
+    with _scratch() as tmp:
+        home, user = _fresh(tmp)
+        other = _unrouted_profile(home, standalone=True) if kind == "standalone" else _unrouted_profile(home)
+        if kind == "parked":
+            (other / "gateway.parked").touch()
+        (other / ".env").write_text("GATEWAY_ALLOW_ALL_USERS=true\n")
+        proc = _real_live(home, user)
+    assert proc.returncode == admin.EXIT_OK, proc.stdout
+    assert "allow-all gate" not in proc.stdout, proc.stdout
 
 
 @UNROUTED

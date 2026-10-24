@@ -24,6 +24,8 @@ ULID = "01JABCDEFGHJKMNPQRSTVWXYZ0"
 ULID2 = "01JXYZ0123456789ABCDEFGHJK"
 TS = "2026-10-03T18:00:00Z"
 
+UNNUMBERED = {"welcome"}  # S→D types outside the outbox numbering: no seq (T1.09a)
+
 # type -> direction (D→S = device to server, S→D = server to device, both)
 DESIGN_TYPES = {
     "hello": "D→S",
@@ -123,7 +125,7 @@ def frame(type_, body=None, **extra):
         "ts": TS,
         "body": copy.deepcopy(VALID_BODIES[type_] if body is None else body),
     }
-    if DESIGN_TYPES[type_] == "S→D":
+    if DESIGN_TYPES[type_] == "S→D" and type_ not in UNNUMBERED:
         f["seq"] = 7
     f.update(extra)
     return f
@@ -268,7 +270,7 @@ def test_lane_is_a_pattern_not_an_enum(schema):
     assert lane["pattern"] == "^[a-z][a-z0-9_-]{0,31}$"
 
 
-@pytest.mark.parametrize("type_", sorted(t for t, d in DESIGN_TYPES.items() if d == "S→D"))
+@pytest.mark.parametrize("type_", sorted(t for t, d in DESIGN_TYPES.items() if d == "S→D" and t not in UNNUMBERED))
 def test_server_to_device_requires_seq(validator, type_):
     f = frame(type_)
     del f["seq"]

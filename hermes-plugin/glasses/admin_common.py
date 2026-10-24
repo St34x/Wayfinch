@@ -35,6 +35,21 @@ def hermes_home(args: argparse.Namespace, env: Mapping[str, str]) -> Path:
     return Path(args.hermes_home or env.get("HERMES_HOME") or Path.home() / ".hermes")
 
 
+def local_paths(args: argparse.Namespace, env: Mapping[str, str]) -> argparse.Namespace:
+    """*args* with ``--config`` and ``--hermes-home`` as ``Path``s. ``Path`` collapses ``//``, so a URL in
+    ``--config``, ``--hermes-home``, the ``$HERMES_HOME`` in use or the ``$HOME`` behind the default ``~/.hermes``
+    is recognised on the raw string, before any conversion (``ConfigFileError``; the value is not shown). An empty
+    ``$HERMES_HOME`` counts as unset, as in ``hermes_home``. Flags are declared as plain strings."""
+    env_home = None if args.hermes_home is not None else env.get("HERMES_HOME") or None
+    home_dir = env.get("HOME") if args.hermes_home is None and env_home is None else None
+    sources = (("--config", args.config), ("--hermes-home", args.hermes_home), ("$HERMES_HOME", env_home))
+    for name, value in (*sources, ("$HOME", home_dir)):
+        if value is not None and "://" in str(value):
+            raise ConfigFileError(f"{name}: not a local path (it contains '://'; the value is not shown)")
+    paths = {key: None if getattr(args, key) is None else Path(getattr(args, key)) for key in ("config", "hermes_home")}
+    return argparse.Namespace(**{**vars(args), **paths})
+
+
 def glasses_config(args: argparse.Namespace, env: Mapping[str, str]) -> tuple[GlassesConfig, Path]:
     """The validated glasses config of ``--config`` (else ``<home>/config.yaml``) and the Hermes home."""
     home = hermes_home(args, env)

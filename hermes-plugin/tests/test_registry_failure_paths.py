@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Device registry failure paths: cross-process adds, on-disk tombstone, atomic-write failures, odd verify
+"""Device registry failure paths: cross-process adds, on-disk tombstone, atomic-write failures, odd lookup
 inputs, no secret in messages, and hand-edited or deeply nested files as typed corrupt errors."""
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ import pytest
 
 from glasses import config as gcfg
 from glasses import registry as reg
+from glasses import registry_parse as rp
 
 FP_A = "ab" * 32
 FP_B = "cd" * 32
@@ -80,7 +81,7 @@ def test_concurrent_adds_from_four_processes_lose_nothing(tmp_path, state_dir):
     assert len(issued) == 40
     r = reg.Registry(state_dir)
     assert len(r.list()) == 40
-    assert all(r.verify(token, fp) is not None for token, fp in issued)
+    assert all(r.lookup(token, fp)[0] is not None for token, fp in issued)
     assert sorted(os.listdir(state_dir)) == [reg.FILE_NAME, reg.LOCK_NAME]  # no temp left
 
 
@@ -112,16 +113,16 @@ def test_more_bad_lanes_refused_without_echo(registry, state_dir, lanes):
 def test_lane_rule_is_the_envelope_lane_pattern(registry):
     # MAX_LANES == welcome.lanes.maxItems is T1.66's contract test (config side); here: same regex as the schema.
     schema = json.loads((PLUGIN_ROOT.parent / "protocol" / "envelope.schema.json").read_text(encoding="utf-8"))
-    assert reg.LANE_RE is gcfg.LANE_RE and reg.MAX_LANES is gcfg.MAX_LANES
-    assert f"^{reg.LANE_RE.pattern}$" == schema["$defs"]["lane"]["pattern"]
-    lanes = [f"l{i}" for i in range(reg.MAX_LANES)]
+    assert rp.LANE_RE is gcfg.LANE_RE and rp.MAX_LANES is gcfg.MAX_LANES
+    assert f"^{rp.LANE_RE.pattern}$" == schema["$defs"]["lane"]["pattern"]
+    lanes = [f"l{i}" for i in range(rp.MAX_LANES)]
     device, _ = registry.add("Max", FP_A, lanes)
-    assert len(device.lanes) == reg.MAX_LANES
+    assert len(device.lanes) == rp.MAX_LANES
     with pytest.raises(reg.InvalidDeviceError):
         registry.add("Over", FP_B, lanes + ["x"])
 
 
-# -- verify with odd inputs ----------------------------------------------------------------------
+# -- lookup with odd inputs ----------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -146,14 +147,14 @@ def test_verify_odd_tokens_return_none(registry, token):
     _, real = registry.add("Phone", FP_A, [])
     if isinstance(token, str):
         token = token.replace("TOKEN", real)
-    assert registry.verify(token, FP_A) is None
+    assert registry.lookup(token, FP_A)[0] is None
 
 
 @pytest.mark.parametrize("fp", [None, "", " " + FP_A, "ＡＢ" * 32, "ab:" * 31 + "ab", 0, b"ab" * 32, ["x"]])
 def test_verify_odd_fingerprints_return_none(registry, fp):
     _, token = registry.add("Phone", FP_A, [])
-    assert registry.verify(token, fp) is None
-    assert registry.revoked_fingerprint(fp) is False
+    assert registry.lookup(token, fp)[0] is None
+    assert registry.lookup("x" * 43, fp)[1] is False
 
 
 # -- revoke: tombstone on disk ------------------------------------------------------------------
@@ -170,9 +171,9 @@ def test_revoke_tombstone_on_disk(registry, state_dir):
     assert tomb["tokenSha256"] is None and tomb["certFingerprint"] == FP_A
     assert _sha(gone_tok) not in raw and gone_tok not in raw
     assert entries[keep.device_id]["tokenSha256"] == _sha(keep_tok)
-    assert registry.verify(gone_tok, FP_A) is None
-    assert registry.verify(keep_tok, FP_B) == keep
-    assert registry.revoked_fingerprint(FP_A) is True and registry.revoked_fingerprint(FP_B) is False
+    assert registry.lookup(gone_tok, FP_A)[0] is None
+    assert registry.lookup(keep_tok, FP_B)[0] == keep
+    assert registry.lookup("x" * 43, FP_A)[1] is True and registry.lookup("x" * 43, FP_B)[1] is False
     assert _mode(state_dir / reg.FILE_NAME) == 0o600 and _mode(state_dir) == 0o700
 
 
@@ -242,7 +243,7 @@ def test_corrupt_file_holding_a_hash_never_echoes_it(registry, state_dir):
     data = json.loads(path.read_text())
     data["devices"][0]["extra"] = token  # malformed entry that also carries secrets
     path.write_text(json.dumps(data)[:-3])  # and truncated JSON
-    for call in (registry.list, lambda: registry.verify(token, FP_A), lambda: registry.revoked_fingerprint(FP_A)):
+    for call in (registry.list, lambda: registry.lookup(token, FP_A)[0], lambda: registry.lookup("x" * 43, FP_A)[1]):
         with pytest.raises(reg.RegistryCorruptError) as info:
             call()
         assert token not in str(info.value) and _sha(token) not in str(info.value)
@@ -266,4 +267,4 @@ def test_hand_edited_bad_lane_on_disk_is_corrupt(registry, state_dir):
     data["devices"][0]["lanes"] = ["Work\r"]
     path.write_text(json.dumps(data))
     with pytest.raises(reg.RegistryCorruptError):
-        registry.verify(token, FP_A)
+        registry.lookup(token, FP_A)[0]

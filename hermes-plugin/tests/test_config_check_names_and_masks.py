@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 """``config check --live``: the filters between Hermes' answers and the output, one rule at a time.
 
-What is hidden (``.env`` values, also in warnings), what is never shown (a gate line that is not of the known shape,
-even with a harmless head), what a ``.env`` may not rename (temporary directories, the user profile), and that
-Hermes' warnings and log level are put back as they were.
+What is printed of a profile name (a served identifier; an unserved route is a fixed placeholder, whatever the
+environment holds), what is never shown (a gate line that is not of the known shape, even with a harmless head),
+what a ``.env`` may not rename (temporary directories, the user profile), and that Hermes' warnings and log level
+are put back as they were.
 """
 
 from __future__ import annotations
@@ -80,10 +81,24 @@ def test_a_gate_line_with_anything_but_printable_ascii_after_the_shape_is_not_sh
     assert "\n" not in shown and "\x1b" not in shown
 
 
-# -- .env values are hidden in warnings as well ----------------------------------------------------------------------
+# -- the one rule for a route name: served = named, anything else = the placeholder ------------------------------------
 
 
-def test_a_dotenv_value_is_hidden_in_a_warning_line(tmp_path):
+@pytest.mark.parametrize("name", ["work", "default", "a", "x" * 70])
+def test_a_served_route_name_is_returned_as_it_is(name):
+    assert he.name_if_served(name, {name, "default"}) == name
+
+
+@pytest.mark.parametrize("name", ["ghost", "", " work ", "Work", "pre-abc-suf", "https://u:p@h/x", "a\nb"])
+def test_a_route_name_that_is_not_served_is_the_placeholder_whatever_it_looks_like(name):
+    assert he.name_if_served(name, {"work", "default"}) == he.HIDDEN_NAME
+    assert admin_names.shown_name(he.HIDDEN_NAME, quote=True).startswith("<a profile name not shown")
+
+
+# -- a value in the facts changes no warning either ------------------------------------------------------------------
+
+
+def test_a_served_profile_named_like_a_value_stays_named_in_a_warning_line(tmp_path):
     odd = admin.ProfileFacts("", "", GOOD.glasses_tools, GOOD.telegram_tools, 0, 300)  # no stt.provider: a warning
     facts = admin.HermesFacts(
         frozenset({"default", "workname"}),
@@ -93,10 +108,10 @@ def test_a_dotenv_value_is_hidden_in_a_warning_line(tmp_path):
     )
     code, out = run_live(live_home(tmp_path), facts)
     assert code == admin.EXIT_OK and "stt.provider is not set" in out, out
-    assert "workname" not in out and f"warning: profile {he.MASK}: stt.provider" in out, out
+    assert "warning: profile workname: stt.provider is not set" in out, out
 
 
-# -- real Hermes: the toolset table and the values the masking covers ------------------------------------------------
+# -- real Hermes: the toolset table, and no environment value kept in the facts --------------------------------------
 
 FACTS_RUNNER = f"""\
 import json, sys
@@ -108,7 +123,7 @@ print(json.dumps({{"known": sorted(facts.known_toolsets), "values": sorted(facts
 """
 
 
-def test_the_toolset_table_and_the_masked_values_of_every_served_profile():
+def test_the_toolset_table_is_read_and_no_environment_value_is_kept_in_the_facts():
     with _scratch() as tmp:
         home = _live_scratch(Path(tmp))
         (home / ".env").write_text("LAUNCH_KEY=launchSecretWord\nSHORT=ab\n", encoding="utf-8")
@@ -117,4 +132,4 @@ def test_the_toolset_table_and_the_masked_values_of_every_served_profile():
     assert proc.returncode == 0, proc.stderr[-2000:]
     seen = json.loads(proc.stdout.strip().splitlines()[-1])
     assert {"web", "terminal", "hermes-glasses"} <= set(seen["known"]), seen["known"][:20]
-    assert seen["values"] == ["launchSecretWord", "workSecretWord"], seen["values"]  # two characters: not masked
+    assert seen["values"] == [], seen["values"]  # nothing is masked, so nothing is kept

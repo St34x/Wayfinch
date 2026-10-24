@@ -9,6 +9,7 @@ imported adapter module are removed again before conftest's Hermes-import check 
 from __future__ import annotations
 
 import asyncio
+import enum
 import importlib
 import logging
 import sys
@@ -23,6 +24,8 @@ from glasses import config as gcfg
 from glasses import gate
 
 ADAPTER_MODULE = "glasses.adapter"
+ROUTER_MODULE = "glasses.adapter_router"
+EDGE_SOCKET = "/run/glasses-plugin/edge.sock"
 
 
 class FakePlatform:
@@ -58,6 +61,28 @@ class FakeBaseAdapter:
     async def handle_message(self, event) -> None:
         self.handed_on.append(event)
 
+    def build_source(self, chat_id, chat_type="dm", user_id=None):
+        """As the pinned base: a route to a profile the gateway does not serve marks the source (here: by chat id)."""
+        rejected = chat_id in getattr(self, "unrouted_chats", ())
+        return SimpleNamespace(chat_id=chat_id, chat_type=chat_type, user_id=user_id, profile_route_rejected=rejected)
+
+
+class FakeMessageType(enum.Enum):
+    TEXT = "text"
+
+
+@dataclass
+class FakeMessageEvent:
+    """Stands in for ``gateway.platforms.event.MessageEvent`` (the fields the adapter sets)."""
+
+    text: str
+    message_type: FakeMessageType
+    user_id: str | None = None
+    source: object = None
+    message_id: str | None = None
+    allow_gateway_control: bool = True  # the pinned default
+    _gateway_accepted: bool | None = None
+
 
 def _fake_hermes_modules() -> dict[str, ModuleType]:
     modules = {name: ModuleType(name) for name in ("gateway", "gateway.config", "gateway.platforms")}
@@ -66,6 +91,10 @@ def _fake_hermes_modules() -> dict[str, ModuleType]:
     base.BasePlatformAdapter = FakeBaseAdapter
     base.SendResult = FakeSendResult
     modules["gateway.platforms.base"] = base
+    event_module = ModuleType("gateway.platforms.event")
+    event_module.MessageEvent = FakeMessageEvent
+    event_module.MessageType = FakeMessageType
+    modules["gateway.platforms.event"] = event_module
     return modules
 
 
@@ -74,13 +103,25 @@ def adapter_module() -> Iterator[ModuleType]:
     with pytest.MonkeyPatch.context() as mp:
         for name, module in _fake_hermes_modules().items():
             mp.setitem(sys.modules, name, module)
-        mp.delitem(sys.modules, ADAPTER_MODULE, raising=False)
+        for name in (ADAPTER_MODULE, ROUTER_MODULE):  # both import the stand-in gateway modules
+            mp.delitem(sys.modules, name, raising=False)
         try:
             yield importlib.import_module(ADAPTER_MODULE)
         finally:
-            sys.modules.pop(ADAPTER_MODULE, None)
-            if hasattr(glasses, "adapter"):
-                delattr(glasses, "adapter")
+            _forget_adapter_modules()
+
+
+def _forget_adapter_modules() -> None:
+    for name in (ADAPTER_MODULE, ROUTER_MODULE):
+        sys.modules.pop(name, None)
+        if hasattr(glasses, name.removeprefix("glasses.")):
+            delattr(glasses, name.removeprefix("glasses."))
+
+
+@pytest.fixture
+def router_module(adapter_module: ModuleType) -> ModuleType:
+    """``glasses.adapter_router`` as the adapter fixture imported it (owns ``_unrouted`` and the event types)."""
+    return sys.modules[ROUTER_MODULE]
 
 
 def platform_config(extra=None):
@@ -102,29 +143,29 @@ def event():
 
 
 def test_adapter_is_built_for_the_glasses_platform_with_loaded_settings(adapter_module):
-    adapter = new_adapter(adapter_module, {"host": "127.0.0.2", "port": 9100})
+    adapter = new_adapter(adapter_module, {"edge": {"socket": EDGE_SOCKET, "user": "edge-proxy"}, "bridge_port": 9100})
     assert adapter.platform.value == gcfg.PLATFORM_NAME
-    assert (adapter.settings.host, adapter.settings.port) == ("127.0.0.2", 9100)
-    assert adapter.settings.bridge_port == gcfg.DEFAULTS["bridge_port"]
+    settings = adapter.settings
+    assert (settings.edge_socket, settings.edge_user, settings.bridge_port) == (EDGE_SOCKET, "edge-proxy", 9100)
 
 
 def test_adapter_without_extra_uses_the_defaults(adapter_module):
     adapter = adapter_module.GlassesAdapter(SimpleNamespace(enabled=True, extra=None))
-    assert (adapter.settings.host, adapter.settings.port) == (gcfg.DEFAULTS["host"], gcfg.DEFAULTS["port"])
+    assert (adapter.settings.edge_socket, adapter.settings.edge_user) == ("", "")
 
 
 def test_adapter_refuses_an_invalid_config(adapter_module):
     with pytest.raises(gcfg.ConfigError):
-        new_adapter(adapter_module, {"port": "not a port"})
+        new_adapter(adapter_module, {"bridge_port": "not a port"})
 
 
-@pytest.mark.parametrize("extra", [["port", 9100], "port: 9100", 9100])
+@pytest.mark.parametrize("extra", [["bridge_port", 9100], "bridge_port: 9100", 9100])
 def test_adapter_refuses_an_extra_that_is_not_a_mapping(adapter_module, extra):
     with pytest.raises(gcfg.ConfigError):
         adapter_module.GlassesAdapter(SimpleNamespace(enabled=True, extra=extra))
 
 
-@pytest.mark.parametrize("config", [SimpleNamespace(enabled=True), {"enabled": True, "extra": {"port": 9100}}])
+@pytest.mark.parametrize("config", [SimpleNamespace(enabled=True), {"enabled": True, "extra": {"bridge_port": 9100}}])
 def test_adapter_is_not_built_with_defaults_from_a_config_without_an_extra_attribute(adapter_module, config):
     # Hermes' PlatformConfig always carries ``extra``; any other shape fails construction (the gateway then builds
     # no adapter) instead of silently running on the default settings.
@@ -134,7 +175,7 @@ def test_adapter_is_not_built_with_defaults_from_a_config_without_an_extra_attri
 
 def test_adapter_ignores_extra_keyword_arguments_from_the_gateway(adapter_module):
     adapter = adapter_module.GlassesAdapter(platform_config(), session_store=object())
-    assert adapter.settings.port == gcfg.DEFAULTS["port"]
+    assert adapter.settings.bridge_port == gcfg.DEFAULTS["bridge_port"]
 
 
 def test_adapter_carries_the_gateway_caps(adapter_module):
@@ -146,9 +187,9 @@ def test_registered_factory_builds_the_adapter(adapter_module):
     calls = []
     glasses.register(SimpleNamespace(register_platform=lambda **kwargs: calls.append(kwargs)))
     (call,) = calls
-    adapter = call["adapter_factory"](platform_config({"port": 9101}))
+    adapter = call["adapter_factory"](platform_config({"bridge_port": 9101}))
     assert isinstance(adapter, adapter_module.GlassesAdapter)
-    assert adapter.settings.port == 9101
+    assert adapter.settings.bridge_port == 9101
 
 
 # --------------------------------------------------------------------------------------------
@@ -156,18 +197,18 @@ def test_registered_factory_builds_the_adapter(adapter_module):
 # --------------------------------------------------------------------------------------------
 
 
-def test_connect_reports_a_retryable_not_implemented_error(adapter_module, caplog):
-    adapter = new_adapter(adapter_module, {"port": 9102})
+def test_connect_without_edge_settings_reports_a_retryable_edge_listener_error(adapter_module, caplog):
+    adapter = new_adapter(adapter_module, {"edge": {"socket": EDGE_SOCKET}})
     with caplog.at_level(logging.WARNING, logger=ADAPTER_MODULE):
         assert asyncio.run(adapter.connect()) is False
-    assert adapter.fatal_errors == [("not_implemented", adapter_module.NOT_IMPLEMENTED, True)]
-    assert "would bind 127.0.0.1:9102" in caplog.text
+    assert adapter.fatal_errors == [("edge_listener", "glasses edge listener not started: edge.user: not set", True)]
+    assert "edge listener not started: edge.user: not set" in caplog.text
 
 
 def test_reconnect_attempt_fails_the_same_way(adapter_module):
     adapter = new_adapter(adapter_module)
     assert asyncio.run(adapter.connect(is_reconnect=True, attempt=3)) is False
-    assert [code for code, _, retryable in adapter.fatal_errors if retryable] == ["not_implemented"]
+    assert [code for code, _, retryable in adapter.fatal_errors if retryable] == ["edge_listener"]
 
 
 @pytest.mark.parametrize(
@@ -181,7 +222,7 @@ def test_connect_refuses_while_the_allow_all_gate_is_open(adapter_module, monkey
         assert asyncio.run(adapter.connect()) is False
     assert adapter.fatal_errors == [("allow_all_gate", "glasses allow-all gate open (see log)", True)]
     assert f"refusing: process environment: {name}" in caplog.text
-    assert "would bind" not in caplog.text
+    assert "edge listener not started" not in caplog.text
 
 
 def test_connect_rechecks_the_gate_on_every_attempt(adapter_module, monkeypatch):
@@ -189,7 +230,7 @@ def test_connect_rechecks_the_gate_on_every_attempt(adapter_module, monkeypatch)
     asyncio.run(adapter.connect())
     monkeypatch.setenv("GLASSES_ALLOW_ALL_USERS", "1")
     asyncio.run(adapter.connect(is_reconnect=True))
-    assert [code for code, _, _ in adapter.fatal_errors] == ["not_implemented", "allow_all_gate"]
+    assert [code for code, _, _ in adapter.fatal_errors] == ["edge_listener", "allow_all_gate"]
 
 
 def test_disconnect_marks_the_adapter_disconnected(adapter_module):
@@ -224,14 +265,16 @@ def test_inbound_event_is_dropped_while_the_gate_is_open(adapter_module, monkeyp
 
 
 # --------------------------------------------------------------------------------------------
-# outbound: nothing is delivered yet
+# outbound before connect(): nothing to store into (the outbox paths: test_outbox_send.py)
 # --------------------------------------------------------------------------------------------
 
 
-def test_send_delivers_nothing_and_is_not_retried(adapter_module):
+def test_send_before_connect_stores_nothing_and_is_retryable_and_a_bad_chat_is_not(adapter_module):
     adapter = new_adapter(adapter_module)
     result = asyncio.run(adapter.send("glasses:assistant", "x" * (gcfg.MAX_MESSAGE_LENGTH + 1), metadata={"k": 1}))
-    assert result == FakeSendResult(success=False, error=adapter_module.NOT_IMPLEMENTED, retryable=False)
+    assert result == FakeSendResult(success=False, error=adapter_module.NOT_CONNECTED, retryable=True)
+    bad = asyncio.run(adapter.send("telegram:assistant", "x"))
+    assert bad == FakeSendResult(success=False, error=adapter_module.outbound.BAD_CHAT, retryable=False)
 
 
 def test_chat_info_names_a_direct_chat(adapter_module):
@@ -255,7 +298,7 @@ def _hermes_api_raising(exc: BaseException):
     return lambda: SimpleNamespace(
         platform_gate_env=lambda name, default="": default,
         build_profile_secret_scope=lambda home: {},
-        installed_profiles=installed,
+        served_profiles=installed,
     )
 
 

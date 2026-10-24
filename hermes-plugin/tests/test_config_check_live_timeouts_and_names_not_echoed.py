@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-"""``config check --live``: a timeout that came out of a ``${VAR}`` is described, never printed as a number, and a
-routed profile name equal to a ``.env`` or process-environment value is hidden only when the profile is not served.
+"""``config check --live``: a timeout the fakes carry is described, never printed as a number; a ``${VAR}`` in a
+timeout or a route is not evaluated (one fixed line, no value printed); a route to a profile this gateway does not
+serve is shown as a fixed placeholder whatever its name is; a served profile is always named. The identity of the
+output with and without an environment value is in test_config_check_live_output_independent_of_env.py.
 """
 
 from __future__ import annotations
@@ -27,6 +29,10 @@ def _fresh(tmp: str) -> tuple[Path, Path]:
 
 def _set(section: str, key: str, ref: str):
     return lambda config: config[section].__setitem__(key, ref)
+
+
+def _process(where: str, value: str):
+    return {"CANARY": value} if where == "process" else None
 
 
 def _route_to(name: str):
@@ -62,64 +68,82 @@ def test_real_live_a_negative_dotenv_number_as_approvals_timeout_is_not_printed(
         home, user = _fresh(tmp)
         _edit(home, _set("approvals", "timeout", "${PIN}"))
         proc = _run(home, user, f'PIN="{pin}"\n')
-    assert proc.returncode == admin.EXIT_ERRORS, proc.stdout
-    assert "approvals.timeout resolves to a negative number" in proc.stdout, proc.stdout
+    assert proc.returncode == admin.EXIT_OK, proc.stdout
+    assert "profile default: approvals.timeout: uses an environment reference, not checked" in proc.stdout, proc.stdout
     _assert_absent(proc, pin.lstrip("-"))
 
 
-def test_real_live_a_route_to_a_served_profile_is_not_hidden_by_an_equal_dotenv_value():
-    with _scratch() as tmp:
-        home, user = _fresh(tmp)
-        _edit(home, _route_to("${WHO}"))
-        proc = _run(home, user, "WHO=work\n")
-    assert proc.returncode == admin.EXIT_OK and proc.stdout.startswith("config check: OK"), proc.stdout
-    assert HIDDEN not in proc.stdout and proc.stderr == "", proc.stderr
+def test_real_live_a_route_reference_is_not_evaluated_whatever_its_value_is():
+    def run(who: str):
+        with _scratch() as tmp:
+            home, user = _fresh(tmp)
+            _edit(home, _route_to("${WHO}"))
+            return _run(home, user, f"WHO={who}\n")
+
+    proc, other = run("work"), run("ghost")
+    assert (proc.returncode, proc.stdout, proc.stderr) == (other.returncode, other.stdout, other.stderr)
+    assert (
+        proc.returncode == admin.EXIT_OK
+        and "warning: gateway.profile_routes: uses an environment reference, not checked" in proc.stdout
+    ), proc.stdout
+    assert HIDDEN not in proc.stdout and "work" not in proc.stdout and proc.stderr == "", proc.stdout
 
 
-@pytest.mark.parametrize("where", ["dotenv", "process"])
-def test_real_live_a_route_to_an_unserved_profile_equal_to_an_environment_value_stays_an_error_with_the_name_hidden(
-    where,
-):
+@pytest.mark.parametrize("where", ["dotenv", "process", "none"])
+def test_real_live_a_route_to_an_unserved_profile_stays_an_error_with_the_name_hidden_equal_to_a_value_or_not(where):
     with _scratch() as tmp:
         home, user = _fresh(tmp)
         _edit(home, _route_to("ghost"))
         proc = _run(
             home,
             user,
-            "X=ghost\n" if where == "dotenv" else "",
+            "X=ghost\n" if where == "dotenv" else "X=other\n" if where == "none" else "",
             env_extra={"X": "ghost"} if where == "process" else None,
         )
     assert proc.returncode == admin.EXIT_ERRORS and HIDDEN in proc.stdout, proc.stdout
     assert "'ghost'" not in proc.stdout and "does not serve" in proc.stdout, proc.stdout
 
 
-def test_real_live_a_route_to_an_unserved_profile_with_no_equal_value_names_the_profile():
+@pytest.mark.parametrize("name", ["ghost", "ghost2", "a-typo", "work2"])
+def test_real_live_every_unserved_route_name_prints_the_same_placeholder(name):
     with _scratch() as tmp:
         home, user = _fresh(tmp)
-        _edit(home, _route_to("ghost"))
-        proc = _run(home, user, "X=other\n")
-    assert proc.returncode == admin.EXIT_ERRORS and "routed to profile 'ghost'" in proc.stdout, proc.stdout
+        _edit(home, _route_to(name))
+        proc = _run(home, user, "EMPTY=\n")
+    assert proc.returncode == admin.EXIT_ERRORS and "lane 'work' is routed to profile " + HIDDEN in proc.stdout
+    assert f"'{name}'" not in proc.stdout and "does not serve" in proc.stdout, proc.stdout
 
 
-@pytest.mark.parametrize("dotenv", ["EMPTY=\n", "X=gh\n", "X=hos\n"], ids=["empty value", "prefix", "inner part"])
-def test_real_live_only_the_whole_name_is_compared_with_the_environment_values(dotenv):
-    with _scratch() as tmp:
-        home, user = _fresh(tmp)
-        _edit(home, _route_to("ghost"))
-        proc = _run(home, user, dotenv)
-    assert proc.returncode == admin.EXIT_ERRORS and "routed to profile 'ghost'" in proc.stdout, proc.stdout
-
-
-@pytest.mark.xfail(
-    strict=True,
-    reason="known gap (T1.196): a .env value padded with white space inside quotes, used as a whole route profile "
-    "name, is printed stripped, because Hermes strips the name and the mask compares the raw value",
+@pytest.mark.parametrize(
+    "value, where",
+    [
+        (" padcanary9 ", "dotenv"),
+        ("padcanary9 ", "dotenv"),
+        (" padcanary9", "dotenv"),
+        (" PADCANARY9 ", "dotenv"),
+        (" abc", "dotenv"),
+        (" padcanary9 ", "process"),
+    ],
+    ids=["both sides", "trailing", "leading", "upper case", "short", "process environment"],
 )
-@pytest.mark.parametrize("value", [" padcanary9 ", "padcanary9 ", " abc"], ids=["both sides", "trailing", "short"])
-def test_real_live_a_padded_dotenv_value_used_as_a_route_profile_is_not_printed(value):
+def test_real_live_a_padded_value_used_as_a_route_profile_is_not_printed(value, where):
     with _scratch() as tmp:
         home, user = _fresh(tmp)
         _edit(home, _route_to("${CANARY}"))
-        proc = _run(home, user, f'CANARY="{value}"\n')
-    assert proc.returncode == admin.EXIT_ERRORS, proc.stdout
+        proc = _run(home, user, f'CANARY="{value}"\n' if where == "dotenv" else "", env_extra=_process(where, value))
+    assert (
+        proc.returncode == admin.EXIT_OK
+        and "gateway.profile_routes: uses an environment reference, not checked" in proc.stdout
+    ), proc.stdout
     _assert_absent(proc, value.strip())
+
+
+@pytest.mark.parametrize("where", ["dotenv", "process"])
+def test_real_live_a_white_space_only_value_used_as_a_route_profile_changes_nothing(where):
+    with _scratch() as tmp:
+        home, user = _fresh(tmp)
+        _edit(home, _route_to("${CANARY}"))
+        proc = _run(home, user, "")  # the reference is not set: it stays literal
+        padded = _run(home, user, 'CANARY="   "\n' if where == "dotenv" else "", env_extra=_process(where, "   "))
+    assert padded.returncode == proc.returncode == admin.EXIT_OK, padded.stdout  # Hermes skips an empty route name
+    assert padded.stdout == proc.stdout and padded.stderr == "", padded.stdout

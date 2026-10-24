@@ -35,7 +35,7 @@ def imported_names() -> dict[str, set[str]]:
 
 def test_the_scan_finds_the_known_importers() -> None:
     files = set(imported_names())
-    assert {"__init__.py", "adapter.py", "admin.py", "gate.py", "hermes_facts.py", "registry.py"} <= files, files
+    assert {"__init__.py", "adapter.py", "admin.py", "gate.py", "hermes_facts.py", "registry_parse.py"} <= files, files
 
 
 def test_every_name_other_modules_import_is_still_exported() -> None:

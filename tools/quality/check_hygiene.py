@@ -4,7 +4,9 @@
 
 Tree mode (default, part of `make test` via mk/hygiene.mk):
   (a) every task-id marker keyword (the three words matched by `_KEYWORD`) inside a comment of a tracked file
-      outside `.team/` must be written `TODO(<task id>)`; ids are `T<n>.<n>[a-z]` (letter = optional sub-id such
+      outside `.team/` must be written `TODO(<task id>)`, except the three bare marker comments of the vendored
+      upstream `G2.kt` (`VENDORED_MARKER_LINES`: exact comment lines of that one file; any other marker there or in
+      another file under `android/third_party/` is a finding); ids are `T<n>.<n>[a-z]` (letter = optional sub-id such
       as `T1.06a`), `P.<n>` or `S<nn>[a-z]`.
       Only comment text is matched: `#` / `//` / `/*` / a leading `*` at the start of a line or after
       whitespace, and `<!-- ... -->` in Markdown/XML/HTML. Words inside code, strings, JSON and Markdown prose
@@ -52,6 +54,18 @@ GLOSSARY = "docs/glossary.md"
 GATE_START_FILE = "tools/quality/commit-gate-start.txt"
 GATE_RANGE = "GATE_START..HEAD"
 PRIVATE_DIR = ".team/"
+# Vendored upstream code is kept byte-for-byte (apart from the documented import changes), so the task-id rule (a)
+# is lifted for exactly these comment lines of exactly these upstream files (compared by text after stripping): the
+# bare marker comments the pinned upstream file carries. Any other marker in them, and any marker in a file we add
+# under android/third_party/, is a finding. The private-reference rule (d) applies to every file there.
+_KW = "TO" + "DO"
+VENDORED_MARKER_LINES: dict[str, frozenset[str]] = {
+    "android/third_party/g2-driver/src/main/kotlin/app/hudcompanion/g2driver/sgcs/G2.kt": frozenset({
+        f"// {_KW}: Implement",
+        f"// {_KW}: Implement via dev_settings",
+        f"// {_KW}: Could send via dev_settings",
+    }),
+}
 # Gate code (and its tests) that must name the private folder to leave it out of scope. Nothing else may.
 PRIVATE_FOLDER_EXEMPT = frozenset({
     "tools/check-spdx.sh",
@@ -127,10 +141,16 @@ def comment_texts(path: str, text: str) -> list[tuple[int, str]]:
     return [(n, line[m.end() :]) for n, line in enumerate(text.splitlines(), 1) if (m := marker.search(line))]
 
 
-def todo_findings(path: str, text: str) -> list[str]:
-    """Findings for marker keywords in comments that are not written `TODO(<task id>)`."""
+def todo_findings(path: str, text: str, allowed: frozenset[str] = frozenset()) -> list[str]:
+    """Findings for marker keywords in comments that are not written `TODO(<task id>)`.
+
+    `allowed` holds comment lines (stripped) that are exempt: the vendored upstream lines (`VENDORED_MARKER_LINES`).
+    """
+    lines = text.splitlines()
     findings = []
     for lineno, comment in comment_texts(path, text):
+        if lines[lineno - 1].strip() in allowed:
+            continue
         for word in _KEYWORD.finditer(comment):
             if word.group() == "TODO" and _ID_SUFFIX.match(comment, word.end()):
                 continue
@@ -271,7 +291,8 @@ def check_tree(top: Path) -> tuple[list[str], str]:
         text = _read_text(top / name)
         if text is not None:
             checked += 1
-            findings += todo_findings(name, text) + private_ref_findings(name, text)
+            findings += private_ref_findings(name, text)
+            findings += todo_findings(name, text, VENDORED_MARKER_LINES.get(name, frozenset()))
     if checked == 0:
         raise HygieneError("no tracked text files to check")
     glossary = _read_text(top / GLOSSARY)

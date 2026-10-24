@@ -14,7 +14,8 @@ the client.
 
 ## Fix
 Check `gateway.profile_routes` against `hermes profile list`; fix the profile name or remove the lane from
-`glasses.lanes`. The plugin rejects lanes whose profile is not served (error frame) once that check is in place.
+`glasses.lanes`. The plugin answers a `msg.in` on such a lane with the `error` frame `lane_unrouted` (T1.08) instead of
+handing it to the gateway, so the client is told.
 
 ## Verified
 Verified on an isolated multiplexed test gateway, Hermes `a4648c5f58`, 2026-10-04.

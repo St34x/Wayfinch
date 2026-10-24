@@ -16,7 +16,19 @@ from typing import Any
 import enroll_helpers
 import fake_signer
 import pytest
-from enroll_helpers import BODY, CODE, SIG, SPKI, SUBMITTED, Reply, app_with, exchange, post, relay_for
+from enroll_helpers import (
+    BODY,
+    CODE,
+    SIG,
+    SPKI,
+    SUBMITTED,
+    Reply,
+    app_with,
+    exchange,
+    is_loopback_peer,
+    post,
+    relay_for,
+)
 from fake_signer import Script
 
 from glasses import enroll, signer_client
@@ -125,7 +137,11 @@ def test_a_malformed_code_is_400_and_nothing_reaches_the_signer(fake):
 
 
 def test_an_absent_signer_socket_is_503(tmp_path, caplog):
-    relay = EnrollRelay(lambda: SignerClient(tmp_path / "none.sock", os.geteuid()), limiter=RateLimiter(100))
+    relay = EnrollRelay(
+        lambda: SignerClient(tmp_path / "none.sock", os.geteuid()),
+        peer_allowed=is_loopback_peer,
+        limiter=RateLimiter(100),
+    )
     assert post(relay).status == 503
     assert "SignerUnavailable" in caplog.text
 
@@ -134,7 +150,7 @@ def test_an_unconfigured_signer_is_503_naming_only_the_kind(caplog):
     def unconfigured() -> SignerClient:
         raise signer_client.NotConfigured("signer.socket")
 
-    reply = post(EnrollRelay(unconfigured, limiter=RateLimiter(100)))
+    reply = post(EnrollRelay(unconfigured, peer_allowed=is_loopback_peer, limiter=RateLimiter(100)))
     assert reply.status == 503
     assert [r.getMessage() for r in caplog.records if r.name == "glasses.enroll"] == [
         "enrol relay: signer call failed (NotConfigured)"

@@ -197,16 +197,18 @@ def test_real_live_a_fifo_a_symlinked_and_a_huge_dotenv_are_neither_read_nor_wai
         assert proc.stdout.splitlines() == [UNSAFE, "config check: FAILED (1 error(s), 0 warning(s))"], proc.stdout
 
 
-def test_real_live_a_routed_profile_sees_the_launch_dotenv_and_its_own_wins():
+def test_real_live_a_reference_in_a_routed_profile_is_not_evaluated_whatever_the_dotenv_files_hold():
     with _scratch() as tmp:
         home, user = _live_scratch(Path(tmp)), Path(tmp) / "user"
         user.mkdir()
         _edit(home / "profiles" / "work", lambda c: c["approvals"].__setitem__("timeout", "${LAUNCH_ONLY}"))
         only_launch = _run(home, user, "LAUNCH_ONLY=0\n")
         own = _run(home, user, "LAUNCH_ONLY=0\n", "LAUNCH_ONLY=77\n")
-    assert only_launch.returncode == admin.EXIT_ERRORS, only_launch.stdout
-    assert "error: profile work: approvals.timeout resolves to 0" in only_launch.stdout, only_launch.stdout
-    assert own.returncode == admin.EXIT_OK, own.stdout
+    assert only_launch.returncode == admin.EXIT_OK, only_launch.stdout
+    assert (
+        "warning: profile work: approvals.timeout: uses an environment reference, not checked" in only_launch.stdout
+    ), only_launch.stdout
+    assert (own.returncode, own.stdout, own.stderr) == (only_launch.returncode, only_launch.stdout, only_launch.stderr)
 
 
 class _InterruptedAfterOneName(Mapping[str, str]):

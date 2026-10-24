@@ -36,18 +36,18 @@ def test_example_passes():
 
 
 def test_planted_mistake_is_printed_with_the_glasses_prefix(tmp_path):
-    text = EXAMPLE.read_text(encoding="utf-8").replace("host: 127.0.0.1", "host: 0.0.0.0")
+    text = EXAMPLE.read_text(encoding="utf-8").replace("bridge_port: 8766", "bridge_port: 0")
     code, out = run(["config", "check", "--config", str(write_config(tmp_path, text))])
     assert code == admin.EXIT_ERRORS
     errors = [line for line in out.splitlines() if line.startswith("error: ")]
-    assert errors == [errors[0]] and errors[0].startswith("error: glasses.host: must be a loopback IP literal")
-    assert '(got "0.0.0.0")' in errors[0] and out.rstrip().endswith("config check: FAILED (1 error(s), 0 warning(s))")
+    assert errors == [errors[0]] and errors[0].startswith("error: glasses.bridge_port: must be an integer 1-65535")
+    assert "(got 0)" in errors[0] and out.rstrip().endswith("config check: FAILED (1 error(s), 0 warning(s))")
 
 
 def test_hermes_home_env_selects_the_default_file(tmp_path):
-    write_config(tmp_path, "gateway:\n  platforms:\n    glasses:\n      enabled: true\n      extra: {port: 0}\n")
+    write_config(tmp_path, "gateway:\n  platforms:\n    glasses:\n      enabled: true\n      extra: {bridge_port: 0}\n")
     code, out = run(["config", "check"], env={"HERMES_HOME": str(tmp_path)})
-    assert code == admin.EXIT_ERRORS and "error: glasses.port: must be an integer 1-65535 (got 0)" in out
+    assert code == admin.EXIT_ERRORS and "error: glasses.bridge_port: must be an integer 1-65535 (got 0)" in out
 
 
 def test_hermes_home_flag_wins_over_env(tmp_path):
@@ -98,7 +98,7 @@ def test_allow_all_in_the_environment_is_refused(env, name):
 
 def test_allow_all_key_in_the_config_is_refused_without_echo(tmp_path):
     text = EXAMPLE.read_text(encoding="utf-8").replace(
-        "        port: 8765", f"        allowed_users: '{SECRET}'\n        port: 8765"
+        "        bridge_port: 8766", f"        allowed_users: '{SECRET}'\n        bridge_port: 8766"
     )
     code, out = run(["config", "check", "--config", str(write_config(tmp_path, text))])
     assert code == admin.EXIT_ERRORS and "error: glasses.allowed_users: not allowed" in out and SECRET not in out

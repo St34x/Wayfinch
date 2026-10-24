@@ -13,7 +13,7 @@ OpenSSL rejects **every** certificate of a CA whose CRL is past its `nextUpdate`
 
 ## Fix
 The device-CA signer and the root-side installer are planned: they are built and reviewed outside this repository
-(by the operator's admin agent, milestone M3) and are not part of a deployment today. Once installed, the signer
+and are not part of a deployment today. Once installed, the signer
 re-signs its CRLs daily (30-day `nextUpdate`) and publishes them in `signer.public_dir`, and the installer copies
 them onto the edge and reloads it. When every device is rejected, check that the signer and the installer you
 installed run (their own status and logs) and that the edge holds the current CRL bundle. To have the signer

@@ -1,0 +1,8 @@
+# SPDX-License-Identifier: Apache-2.0
+# ktlint 1.8.0 (ktlintCheck / ktlintFormat in build.gradle.kts). The planted fixtures are in config/test-fixtures/ktlint/.
+root = true
+
+[*.{kt,kts}]
+indent_size = 4
+max_line_length = 120
+ktlint_code_style = ktlint_official

@@ -47,7 +47,8 @@ def test_the_op_allowlist_is_exactly_the_seven_ops_this_plugin_sends() -> None:
     assert set(sp.RESULTS) == sp.OPS
 
 
-# `renew` is allowed for uid hermes by the brief but not built yet (T1.185), so it is refused like an unknown op.
+# `renew` is allowed for uid hermes by the signer protocol but not built yet (T1.185), so it is refused like an
+# unknown op.
 @pytest.mark.parametrize("op", [*ROOT_ONLY_OPS, "renew", "", "STATUS", "status ", "Status", None, b"status", 1])
 def test_root_only_unbuilt_unknown_or_non_text_op_names_are_refused(op: Any) -> None:
     with pytest.raises(UnknownOp):

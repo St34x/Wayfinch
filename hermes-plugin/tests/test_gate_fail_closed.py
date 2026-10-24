@@ -41,7 +41,7 @@ UNEXPECTED = [
     yaml.YAMLError(DETAIL),
     StopIteration(DETAIL),
 ]
-SITES = ["installed_profiles", "secret_scope", "active_scope", "scope_value"]
+SITES = ["served_profiles", "secret_scope", "active_scope", "scope_value"]
 
 
 class RaisingScope(Mapping[str, str]):
@@ -84,8 +84,8 @@ class FakeHermes:
         return {"GLASSES_ALLOWED_USERS": "dev_1"}
 
     def profiles_to_serve(self, multiplex: bool, *, include_standalone: bool = False, include_parked: bool = False):
-        if include_parked:  # the gate's call: every installed profile
-            self._raise_at("installed_profiles")
+        if include_parked or sys._getframe(1).f_globals["__name__"] == "glasses.gate":  # the gate; the wide scan
+            self._raise_at("served_profiles")
         return [("default", self.home), ("work", self.home / "work")]
 
     def modules(self) -> dict[str, ModuleType | SimpleNamespace]:
@@ -187,7 +187,7 @@ def test_every_path_accepts_while_the_hermes_readers_behave(hermes):
     assert gate.violations() == []
     assert glasses.validate_config(platform_config()) is True
     connected, fatal, handed_on, accepted = adapter_run(importlib.import_module(ADAPTER_MODULE))
-    assert [code for code, _, _ in fatal] == ["not_implemented"]
+    assert [code for code, _, _ in fatal] == ["edge_listener"]
     assert len(handed_on) == 1 and accepted is None
     code, out = config_check_live(write_home(hermes.home))
     assert code == admin.EXIT_OK, out

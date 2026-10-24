@@ -25,7 +25,7 @@ MARKER = "planted-marker-must-not-show"
 NOT_BY_SIGNER = "error: revoke: revoked in the plugin, not confirmed by the signer\n"
 NOT_BY_PLUGIN = (
     "error: revoke: revoked by the signer, new connections are refused; "
-    "an open session stays until the plugin's live cut or a gateway restart\n"
+    "a running plugin closes an open session within about a second (its stat poll of the signer's file)\n"
 )
 
 

@@ -25,7 +25,7 @@ from glasses.envelope import (
     decode,
     error_frame,
 )
-from glasses.envelope_rules import BYTE_LIMITS, D2S_ONLY, S2D_ONLY, Violation, violation
+from glasses.envelope_rules import BYTE_LIMITS, D2S_ONLY, S2D_ONLY, UNNUMBERED_S2D, Violation, violation
 from glasses.generated.protocol_types import FRAME_TYPES
 
 PROTOCOL = Path(__file__).resolve().parents[2] / "protocol"
@@ -79,7 +79,8 @@ def assert_no_echo(rejected: FrameRejected) -> None:
 
 def test_every_valid_fixture_with_seq_is_refused_by_direction() -> None:
     with_seq = [path for path in sorted((PROTOCOL / "fixtures" / "valid").glob("*.json")) if "seq" in load_path(path)]
-    assert {load_path(path)["type"] for path in with_seq} == S2D_ONLY | {"error"}  # error: the outboxed S→D one
+    numbered = (S2D_ONLY - UNNUMBERED_S2D) | {"error"}  # error: the outboxed S→D one
+    assert {load_path(path)["type"] for path in with_seq} == numbered
     for path in with_seq:
         with pytest.raises(InvalidSeq):
             decode(path.read_bytes(), VALIDATOR)
@@ -113,7 +114,7 @@ def test_s2d_only_type_from_the_device_is_refused_with_or_without_seq() -> None:
     ("name", "with_seq", "without_seq"),
     [
         ("valid/msg.out.json", None, Violation.SEQ),
-        ("valid/welcome.json", None, Violation.SEQ),
+        ("valid/welcome.json", Violation.SEQ, None),
         ("valid/ping.json", Violation.SEQ, None),
         ("valid/pong.json", Violation.SEQ, None),
         ("valid/error.json", None, None),

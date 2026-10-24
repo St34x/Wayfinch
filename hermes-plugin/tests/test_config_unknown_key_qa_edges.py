@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""QA edge cases (T1.152b) of the near-miss rule for unknown key names, beyond the developer's tests.
+"""Edge cases (T1.152b) of the near-miss rule for unknown key names, beyond the basic tests.
 
 * the near-miss window at EVERY schema key of EVERY level (``len + limit`` shown, ``len + limit + 1`` hidden), so
   the longest name any level can print is pinned (24 characters at the top level);
@@ -31,7 +31,7 @@ from glasses.config_core import edit_distance, is_key_like, near_miss
 
 from conftest import PLUGIN_ROOT
 
-BASE = {"host": "127.0.0.1", "port": 8765, "bridge_port": 8766}
+BASE = {"bridge_port": 8766}
 FAKE_TOKEN = "ghp_" + "Qa7z" * 9  # fake token shape, built at run time
 
 
@@ -82,15 +82,15 @@ def test_near_miss_window_at_every_schema_key(prefix: str, key: str) -> None:
 
 def test_longest_printable_name_per_level() -> None:
     longest = {prefix: max(len(k) + _limit(k) for k in keys) for prefix, keys in LEVELS.items()}
-    assert longest == {"": 24, "long_answers.": 10, "signer.": 12, "meeting.": 18, "meeting.llm.": 10}
+    assert longest == {"": 24, "edge.": 8, "long_answers.": 10, "signer.": 12, "meeting.": 18, "meeting.llm.": 10}
 
 
 @pytest.mark.parametrize(
     ("prefix", "name", "hint"),
     [
-        ("", "pork", "port"),
-        ("", "p0rt", "port"),
-        ("", "ho5t", "host"),
+        ("", "edg", "edge"),
+        ("", "ed9e", "edge"),
+        ("edge.", "usr", "user"),
         ("meeting.", "l", "llm"),
         ("signer.", "usr", "user"),
     ],
@@ -115,11 +115,12 @@ def test_no_random_token_of_7_to_15_characters_is_printed(length: int) -> None:
 @pytest.mark.parametrize(
     ("prefix", "name"),
     [
-        ("signer.", "port"),
-        ("signer.", "hots"),
-        ("meeting.", "host"),
+        ("signer.", "bridge_port"),
+        ("signer.", "edge"),
+        ("meeting.", "edge"),
         ("meeting.llm.", "enabled"),
         ("long_answers.", "socket"),
+        ("edge.", "public_dir"),
         ("", "socket"),
         ("", "model"),
         ("", "language_hints"),
@@ -138,7 +139,7 @@ def test_name_that_folds_to_a_schema_key_via_unicode_is_hinted_but_not_echoed() 
 
 def test_tie_goes_to_the_alphabetically_first_key() -> None:
     assert edit_distance("hort", "host", 2) == edit_distance("hort", "port", 2) == 1
-    assert _unknown_warnings("", {"hort": 1}) == ["hort: unknown key, ignored — did you mean host?"]
+    assert near_miss("hort", ["port", "host"]) == near_miss("hort", ["host", "port"]) == "host"
 
 
 def test_dashes_cost_no_edit() -> None:
@@ -187,7 +188,7 @@ def test_edit_distance_on_a_huge_name_is_capped() -> None:
 
 
 def test_config_check_cli_prints_no_terminal_control_character(tmp_path: Path) -> None:
-    names = ["\x1b]0;pwned\x07", "port\x1b[2K\rFAKE OK", "\x1b[31mhost", "hots\x9b2J", "\u212aind"]
+    names = ["\x1b]0;pwned\x07", "edge\x1b[2K\rFAKE OK", "\x1b[31medge", "edgx\x9b2J", "\u212aind"]
     extra: dict[str, Any] = {**BASE, **{n: 1 for n in names}, "signer": {"user": "", "\x1b[0muser": 1}}
     config = tmp_path / "config.yaml"
     data = {"gateway": {"platforms": {"glasses": {"enabled": True, "extra": extra}}}}

@@ -13,7 +13,8 @@ text; no traceback, path, answer text or exception text is printed, apart from t
 the other subcommands; the command writes no file. A config with errors stops revoke before both steps: fix the
 config first (``glasses-admin config check``), or the open session stays until a gateway restart. Exit status:
 0 = signer and plugin confirmed, 1 = a leg not confirmed (``unknown_device`` is never 0) or a config with
-errors, 2 = a bad device id, an unreadable config, a missing module or a usage error.
+errors, 2 = a bad device id, an unreadable config, a ``--config``/``--hermes-home``/``$HERMES_HOME`` that is a URL
+(``://``; refused before any path is made, value not shown, nothing read), a missing module or a usage error.
 """
 
 from __future__ import annotations
@@ -29,7 +30,15 @@ from typing import Any, TextIO
 
 from . import admin_protocol, signer_client
 from . import signer_protocol as proto
-from .admin_common import EXIT_FAILED, EXIT_OK, EXIT_UNREADABLE, ConfigFileError, ConfigHasErrors, glasses_config
+from .admin_common import (
+    EXIT_FAILED,
+    EXIT_OK,
+    EXIT_UNREADABLE,
+    ConfigFileError,
+    ConfigHasErrors,
+    glasses_config,
+    local_paths,
+)
 from .config import DependencyMissing, GlassesConfig, resolve_state_dir
 from .signer_client import read_peer_uid
 
@@ -173,7 +182,7 @@ def _summary(device_id: str, signer_ok: bool, plugin_ok: bool) -> str:
     if signer_ok:
         return (
             "error: revoke: revoked by the signer, new connections are refused; "
-            "an open session stays until the plugin's live cut or a gateway restart"
+            "a running plugin closes an open session within about a second (its stat poll of the signer's file)"
         )
     return "error: revoke: not confirmed by the signer or the plugin"
 
@@ -184,7 +193,7 @@ def revoke(args: argparse.Namespace, env: Mapping[str, str], out: TextIO) -> int
         print("error: revoke: not a device id (16 lower-case hex)", file=out)
         return EXIT_UNREADABLE
     try:
-        cfg, home = glasses_config(args, env)
+        cfg, home = glasses_config(local_paths(args, env), env)
     except (ConfigFileError, DependencyMissing) as exc:
         print(f"error: {exc}", file=out)
         return EXIT_UNREADABLE
@@ -206,6 +215,6 @@ def register(commands: Any) -> None:
     """Add ``revoke`` to the ``glasses-admin`` subcommands (*commands* from ``add_subparsers``)."""
     cmd = commands.add_parser("revoke", help=_HELP, description=_HELP, epilog=_EPILOG)
     cmd.add_argument("device_id", metavar="DEVICE_ID", help="the device id (16 lower-case hex)")
-    cmd.add_argument("--config", type=Path, help="Hermes config.yaml (default: $HERMES_HOME/config.yaml)")
-    cmd.add_argument("--hermes-home", type=Path, help="Hermes home (default: $HERMES_HOME, else ~/.hermes)")
+    cmd.add_argument("--config", help="Hermes config.yaml (default: $HERMES_HOME/config.yaml)")
+    cmd.add_argument("--hermes-home", help="Hermes home (default: $HERMES_HOME, else ~/.hermes)")
     cmd.set_defaults(run=revoke)

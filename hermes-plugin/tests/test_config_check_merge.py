@@ -33,8 +33,8 @@ def run(tmp_path, data):
     "data,needle",
     [
         (
-            {"gateway": {"platforms": {"glasses": {"enabled": True, "host": "0.0.0.0", "extra": EXTRA}}}},
-            "error: glasses.host: must be a loopback IP literal",
+            {"gateway": {"platforms": {"glasses": {"enabled": True, "bridge_port": 0, "extra": EXTRA}}}},
+            "error: glasses.bridge_port: must be an integer 1-65535",
         ),
         (
             {"gateway": {"platforms": {"glasses": {"enabled": True, "allow_from": ["*"], "extra": EXTRA}}}},
@@ -44,12 +44,15 @@ def run(tmp_path, data):
             {"gateway": {"platforms": {"glasses": {"enabled": True, "dm_policy": "open", "extra": EXTRA}}}},
             "error: glasses.dm_policy: not allowed",
         ),
-        ({"platforms": {"glasses": {"enabled": True, "extra": {**EXTRA, "port": "x"}}}}, "error: glasses.port:"),
+        (
+            {"platforms": {"glasses": {"enabled": True, "extra": {**EXTRA, "bridge_port": "x"}}}},
+            "error: glasses.bridge_port:",
+        ),
         (
             {"gateway": {"glasses": {"enabled": True, "extra": EXTRA, "allow_admin_from": ["a"]}}},
             "error: glasses.allow_admin_from: not allowed",
         ),
-        ({"glasses": {"enabled": True, "host": "0.0.0.0", "extra": EXTRA}}, "error: glasses.host:"),
+        ({"glasses": {"enabled": True, "bridge_port": 0, "extra": EXTRA}}, "error: glasses.bridge_port:"),
         (
             {"gateway": {"platforms": {"glasses": {"enabled": True, "extra": EXTRA}}}, "glasses": {"allow_from": "*"}},
             "error: glasses.allow_from: not allowed",
@@ -63,7 +66,9 @@ def test_keys_outside_extra_are_validated_like_the_gateway(tmp_path, data, needl
 
 def test_explicit_extra_wins_over_a_platform_level_key(tmp_path):
     data = {
-        "gateway": {"platforms": {"glasses": {"enabled": True, "host": "0.0.0.0", "extra": {**EXTRA, "host": "::1"}}}}
+        "gateway": {
+            "platforms": {"glasses": {"enabled": True, "bridge_port": 0, "extra": {**EXTRA, "bridge_port": 9000}}}
+        }
     }
     code, out = run(tmp_path, data)
     assert code == admin.EXIT_OK, out
@@ -79,18 +84,18 @@ def test_typed_keys_stay_out_of_extra_and_root_enabled_wins():
 
 def test_later_block_wins_and_extra_merges():
     view = platform_view({
-        "gateway": {"platforms": {"glasses": {"port": 1, "extra": {"lanes": ["a"]}}}},
-        "platforms": {"glasses": {"port": 2, "extra": {"home_lane": "a"}}},
+        "gateway": {"platforms": {"glasses": {"bridge_port": 1, "extra": {"lanes": ["a"]}}}},
+        "platforms": {"glasses": {"bridge_port": 2, "extra": {"home_lane": "a"}}},
     })
-    assert view is not None and view.extra == {"port": 2, "lanes": ["a"], "home_lane": "a"}
+    assert view is not None and view.extra == {"bridge_port": 2, "lanes": ["a"], "home_lane": "a"}
 
 
 def test_root_block_authored_extra_wins_over_root_keys():
     view = platform_view({
-        "gateway": {"platforms": {"glasses": {"extra": {"host": "::1"}}}},
-        "glasses": {"host": "0.0.0.0", "port": 9, "extra": {"bridge_port": 10}},
+        "gateway": {"platforms": {"glasses": {"extra": {"bridge_port": 9000}}}},
+        "glasses": {"bridge_port": 9, "state_dir": "/x", "extra": {"lanes": ["a"]}},
     })
-    assert view is not None and view.extra == {"host": "::1", "port": 9, "bridge_port": 10}
+    assert view is not None and view.extra == {"bridge_port": 9000, "state_dir": "/x", "lanes": ["a"]}
 
 
 @pytest.mark.parametrize("data", [None, {}, {"gateway": {"platforms": {"glasses": [1]}}}, {"glasses": "x"}])
@@ -106,13 +111,13 @@ def test_non_mapping_extra_is_reported_not_dropped(tmp_path):
 # -- differential: the pinned Hermes merge (merge_platform_sections + PlatformConfig.from_dict) ---------------
 
 CASES = [
-    {"gateway": {"platforms": {"glasses": {"enabled": True, "host": "0.0.0.0", "allow_from": ["*"], "extra": EXTRA}}}},
-    {"gateway": {"platforms": {"glasses": {"host": "0.0.0.0", "token": "t", "extra": {"host": "::1"}}}}},
+    {"gateway": {"platforms": {"glasses": {"enabled": True, "bridge_port": 0, "allow_from": ["*"], "extra": EXTRA}}}},
+    {"gateway": {"platforms": {"glasses": {"bridge_port": 0, "token": "t", "extra": {"bridge_port": 9000}}}}},
     {
         "gateway": {
-            "platforms": {"glasses": {"enabled": True, "port": 1, "dm_policy": "open", "extra": {"lanes": []}}}
+            "platforms": {"glasses": {"enabled": True, "bridge_port": 1, "dm_policy": "open", "extra": {"lanes": []}}}
         },
-        "platforms": {"glasses": {"enabled": False, "port": 2, "extra": {"home_lane": ""}}},
+        "platforms": {"glasses": {"enabled": False, "bridge_port": 2, "extra": {"home_lane": ""}}},
     },
     {"platforms": {"glasses": {"typing_indicator": False, "reply_to_mode": "off", "group_policy": "open"}}},
 ]

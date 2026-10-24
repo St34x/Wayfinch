@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Edge cases and hostile inputs for the glasses plugin config, on top of test_config.py.
 
-Hosts, ports, defaults, types and strict strings.
+Ports, defaults, types and strict strings.
 """
 
 from __future__ import annotations
@@ -24,102 +24,10 @@ def errs(extra, key):
 
 
 # --------------------------------------------------------------------------------------------
-# host: loopback forms
+# bridge_port
 # --------------------------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize(
-    "host",
-    [
-        "127.0.0.2",
-        "127.0.0.0",
-        "127.255.255.255",
-        "127.1.2.3",
-        "::1",
-        "0:0:0:0:0:0:0:1",
-        "0000:0000:0000:0000:0000:0000:0000:0001",
-        "::0001",
-        "0::1",
-    ],
-)
-def test_loopback_literals_accepted(host, no_allow_all):
-    assert gcfg.is_loopback_host(host) is True
-    assert gcfg.load({"host": host}).host == host
-    assert glasses.validate_config(pc({"host": host})) is True
-
-
-@pytest.mark.parametrize(
-    "host",
-    [
-        # shorthand / legacy inet_aton forms: resolve to 127.0.0.1 in C but are not canonical literals
-        "127.1",
-        "127.0.1",
-        "0177.0.0.1",
-        "0x7f.0.0.1",
-        "0x7f000001",
-        "2130706433",
-        "017700000001",
-        # whitespace and control characters
-        " 127.0.0.1 ",
-        " 127.0.0.1",
-        "127.0.0.1 ",
-        "\t127.0.0.1",
-        "127.0.0.1\n",
-        "127.0.0.1\r\n",
-        "127.0.0.1\x00",
-        "127.0.0.1\u200b",
-        "\u00a0127.0.0.1",
-        # look-alikes and suffixes
-        "127.0.0.1.",
-        "１２７.0.0.1",
-        "127.0.0.1/8",
-        "127.0.0.1:8765",
-        "127.0.0.256",
-        # IPv6 forms that are not plain ::1
-        "[::1]",
-        "::1%lo",
-        "::1%1",
-        "fe80::1%lo",
-        "::ffff:127.0.0.1",
-        "::ffff:7f00:1",
-        "::127.0.0.1",
-        "::1/128",
-        "::",
-        "0::0",
-        "::2",
-        # names
-        "localhost",
-        "LOCALHOST",
-        "ip6-localhost",
-        "localhost.",
-        "127.0.0.1.nip.io",
-        # wrong types
-        b"127.0.0.1",
-        2130706433,
-        1,
-        ["127.0.0.1"],
-        {"host": "127.0.0.1"},
-        True,
-        0.0,
-    ],
-)
-def test_non_canonical_or_non_loopback_host_rejected(host, no_allow_all):
-    assert gcfg.is_loopback_host(host) is False
-    assert errs({"host": host}, "host"), gcfg.check({"host": host}).errors
-    assert glasses.validate_config(pc({"host": host})) is False
-
-
-def test_host_error_message_is_actionable():
-    (msg,) = errs({"host": "0.0.0.0"}, "host")
-    assert "loopback" in msg and "127.0.0.1" in msg
-
-
-# --------------------------------------------------------------------------------------------
-# ports
-# --------------------------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("key", ["port", "bridge_port"])
 @pytest.mark.parametrize(
     "value",
     [
@@ -130,55 +38,31 @@ def test_host_error_message_is_actionable():
         2**31,
         2**70,
         -(2**70),
-        "8765",
-        " 8765",
+        "8766",
+        " 8766",
         "0x2000",
         "",
-        b"8765",
-        8765.0,
-        8765.5,
+        b"8766",
+        8766.0,
+        8766.5,
         float("nan"),
         float("inf"),
         True,
         False,
         None,
-        [8765],
+        [8766],
         {"p": 1},
     ],
 )
-def test_port_values_rejected(key, value):
-    extra = {"port": 9001, "bridge_port": 9002}
-    extra[key] = value
-    assert errs(extra, key), gcfg.check(extra).errors
+def test_bridge_port_values_rejected(value):
+    assert errs({"bridge_port": value}, "bridge_port"), gcfg.check({"bridge_port": value}).errors
 
 
-@pytest.mark.parametrize("key", ["port", "bridge_port"])
-@pytest.mark.parametrize("value", [1, 1024, 65535])
-def test_port_boundaries_accepted(key, value):
-    extra = {"port": 9001, "bridge_port": 9002}
-    extra[key] = value
-    if extra["port"] == extra["bridge_port"]:
-        pytest.skip("collides")
-    assert gcfg.check(extra).errors == []
-
-
-@pytest.mark.parametrize(
-    "extra",
-    [
-        {"port": 8766},  # equals the default bridge_port
-        {"bridge_port": 8765},  # equals the default port
-        {"port": 1, "bridge_port": 1},
-        {"port": 65535, "bridge_port": 65535},
-    ],
-)
-def test_bridge_port_equal_to_port_rejected_including_defaults(extra, no_allow_all):
-    assert any("differ" in e for e in errs(extra, "bridge_port")), gcfg.check(extra).errors
-    assert glasses.validate_config(pc(extra)) is False
-
-
-def test_port_swap_with_defaults_is_valid():
-    cfg = gcfg.load({"port": 8766, "bridge_port": 8765})
-    assert (cfg.port, cfg.bridge_port) == (8766, 8765)
+@pytest.mark.parametrize("value", [1, 1024, 8765, 8766, 65535])
+def test_bridge_port_boundaries_accepted(value, no_allow_all):
+    # No other port to differ from: 8765, the old default of the retired ``port``, is an ordinary value now.
+    assert gcfg.check({"bridge_port": value}).errors == []
+    assert glasses.validate_config(pc({"bridge_port": value})) is True
 
 
 # --------------------------------------------------------------------------------------------
@@ -203,7 +87,9 @@ def test_partial_nested_sections_merge_defaults():
 @pytest.mark.parametrize(
     "key,value",
     [
-        ("host", None),
+        ("edge", "edge"),
+        ("edge", ["socket"]),
+        ("edge", 1),
         ("state_dir", 5),
         ("state_dir", ["/x"]),
         ("state_dir", True),
@@ -248,6 +134,12 @@ def test_wrong_types_rejected_with_key_named(key, value, no_allow_all):
 @pytest.mark.parametrize(
     "section,key,value",
     [
+        ("edge", "socket", 1),
+        ("edge", "socket", "rel/edge.sock"),
+        ("edge", "socket", ["/run/edge.sock"]),
+        ("edge", "user", 1),
+        ("edge", "user", "Root"),
+        ("edge", "user", ["edge"]),
         ("signer", "user", 1),
         ("signer", "user", ["signer"]),
         ("signer", "public_dir", 1),
@@ -266,7 +158,7 @@ def test_non_string_unknown_keys_only_warn():
     assert result.errors == [] and len(result.warnings) == 3
 
 
-@pytest.mark.parametrize("extra", ["", "host: 127.0.0.1", 0, 1, True, ["host"], ("host",), 3.5])
+@pytest.mark.parametrize("extra", ["", "lanes: [a]", 0, 1, True, ["lanes"], ("lanes",), 3.5])
 def test_extra_not_a_mapping(extra, no_allow_all):
     (msg,) = gcfg.check(extra).errors
     assert msg.startswith("extra: must be a mapping (got ") and " — " in msg
@@ -288,7 +180,7 @@ def test_validate_config_with_odd_platform_configs(no_allow_all):
 
 
 def test_validate_config_does_not_mutate_extra(no_allow_all):
-    extra = {"port": 18700, "long_answers": {"platform": "matrix"}, "lanes": ["work"], "home_lane": "work"}
+    extra = {"bridge_port": 18700, "long_answers": {"platform": "matrix"}, "lanes": ["work"], "home_lane": "work"}
     snapshot = repr(extra)
     assert glasses.validate_config(pc(extra)) is True
     assert repr(extra) == snapshot
@@ -298,7 +190,7 @@ def test_defaults_are_not_shared_mutable_state():
     cfg = gcfg.load({})
     assert isinstance(cfg.lanes, tuple)
     with pytest.raises(dataclasses.FrozenInstanceError):
-        cfg.port = 1  # frozen dataclass
+        cfg.bridge_port = 1  # frozen dataclass
     gcfg.check({"long_answers": {"platform": "matrix"}})
     assert gcfg.DEFAULTS["long_answers"] == {"platform": "telegram"}
 

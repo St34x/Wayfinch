@@ -4,8 +4,9 @@ label: Glasses
 kind: platform
 version: 0.1.0
 description: >
-  Gateway platform for a smart-glasses companion app (Wayfinch). Binds a loopback
-  port only; a TLS edge in front of it terminates the public connection. Settings
+  Gateway platform for a smart-glasses companion app (Wayfinch). Serves the app only
+  on a unix socket (the edge listener, T1.184b); a TLS edge in front of
+  it terminates the public connection. Settings
   live under gateway.platforms.glasses.extra (see config.py).
 author: The Wayfinch Authors
 requires_env: []

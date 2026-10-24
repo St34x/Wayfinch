@@ -14,23 +14,23 @@ from typing import Any
 
 ALLOWED_USERS_ENV = "GLASSES_ALLOWED_USERS"
 # NOT registered with the gateway (registering it is what makes Hermes honour it, see
-# gateway/authz_mixin.py:645-651 at the pinned commit). It must never be set; if it is set in any
+# gateway/authz_mixin.py:646-652 at the pinned commit). It must never be set; if it is set in any
 # profile's environment the platform is refused (validate_config) and the adapter refuses
 # connections and inbound events at runtime (glasses.gate).
 ALLOW_ALL_ENV = "GLASSES_ALLOW_ALL_USERS"
-# Global gateway gates that also admit glasses senders (gateway/authz_mixin.py:666-695).
+# Global gateway gates that also admit glasses senders (gateway/authz_mixin.py:667-696).
 GATEWAY_ALLOWED_USERS_ENV = "GATEWAY_ALLOWED_USERS"
 GATEWAY_ALLOW_ALL_ENV = "GATEWAY_ALLOW_ALL_USERS"
 # Hermes' truthy set for allow-all switches (gateway/authz_mixin.py:28 ``_TRUTHY``).
 HERMES_TRUTHY = frozenset({"true", "1", "yes"})
 
-# Access-control keys the Hermes gateway reads from ANY platform's ``extra`` (pinned a4648c5f58):
+# Access-control keys the Hermes gateway reads from ANY platform's ``extra`` (pinned d923a5eb48):
 # allow_from / group_allow_from / allowed_users -> allowlists where "*" admits everyone
 # (gateway/authz_mixin.py:482-507, :81-82); group_allowed_chats (:549-553); dm_policy /
 # group_policy (:418-423, :725-731); groups (:425-449); allow_bots (:557-566);
-# unauthorized_dm_behavior (:713-717, gateway/config.py:826-833); allow_admin_from /
+# unauthorized_dm_behavior (:714-718, gateway/config.py:825-832); allow_admin_from /
 # user_allowed_commands and the group_* twins (slash-command access, gateway/slash_access.py:1-25,
-# gateway/run_inbound.py:878); all bridged into ``extra`` by gateway/config_loader.py:208-221.
+# gateway/run_inbound.py:840); all bridged into ``extra`` by gateway/config_loader.py:210-223.
 # ``allowed_chats``/``allow_all_users`` are refused too so nobody believes they work here.
 HERMES_AUTH_KEYS = frozenset({
     "allow_from",

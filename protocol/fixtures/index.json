@@ -1,6 +1,6 @@
 {
   "$comment": "SPDX-License-Identifier: Apache-2.0",
-  "description": "Golden protocol fixtures (T1.03). valid/: schema-valid frames, >=1 per type. invalid/: schema-invalid frames. codec-valid/ and codec-invalid/: schema-valid frames for rules the schema cannot express (UTF-8 byte limits, seq direction, nesting depth, lone surrogates, Feb 29 in non-leap years); the codec accepts codec-valid and rejects codec-invalid. File-name prefix d2s-/s2d- = direction the frame travels. Depth (codec-valid/codec-invalid entries): nesting depth of the open field named in field (skill.call.args, skill.result.output, one skill.manifest.skills[] item), counted as defined in protocol/README.md (Limits and validation notes). Limit (entries with bytes): the max UTF-8 bytes of the field from the README limits table.",
+  "description": "Golden protocol fixtures (T1.03). valid/: schema-valid frames, >=1 per type. invalid/: schema-invalid frames. codec-valid/ and codec-invalid/: schema-valid frames for rules the schema cannot express (UTF-8 byte limits, seq direction, nesting depth, lone surrogates, Feb 29 in non-leap years); the codec accepts codec-valid and rejects codec-invalid. File-name prefix d2s-/s2d- = direction the frame travels. Depth (codec-valid/codec-invalid entries): nesting depth of the open field named in field (skill.call.args, skill.result.output, one skill.manifest.skills[] item), counted as defined in protocol/README.md (Limits and validation notes). Limit (entries with bytes): the max UTF-8 bytes of the field from the README limits table. raw-invalid/: frames whose raw text a strict decoder refuses although a lenient parser reads them; every decoder refuses them. defect repeated-key: schema-valid once a repeated object key is resolved by 'last wins' (also after unescaping, also inside open objects; parsers differ on which duplicate wins). defect not-json: the text is not JSON (an unquoted enum value, a raw control character in a string, NaN/Infinity/1e999/01/+1 or another bare word or a single-quoted value inside an open object); applying repair (replace find by replace) gives a schema-valid frame. Integer fields hold integer literals: invalid/ has the quoted and out-of-range numbers, codec-invalid/ the 1e0 / 2.0 forms (field 'integer').",
   "valid": [
     {
       "file": "ack.json",
@@ -209,6 +209,18 @@
   ],
   "invalid": [
     {
+      "file": "ack-up-to-seq-negative.json",
+      "reason": "integer below its minimum"
+    },
+    {
+      "file": "ack-up-to-seq-string.json",
+      "reason": "integer field holds a quoted number"
+    },
+    {
+      "file": "ack-up-to-seq-too-large.json",
+      "reason": "integer above 2^53-1"
+    },
+    {
       "file": "approval-summary-bidi.json",
       "reason": "bidi control in approval summary"
     },
@@ -237,12 +249,32 @@
       "reason": "id not a ULID (U excluded)"
     },
     {
+      "file": "body-array.json",
+      "reason": "body is an array"
+    },
+    {
+      "file": "body-null.json",
+      "reason": "body is null"
+    },
+    {
+      "file": "body-optional-null.json",
+      "reason": "optional body field langHint is null"
+    },
+    {
       "file": "clarify-card-expired.json",
       "reason": "clarify cards never expire"
     },
     {
+      "file": "clarify-dismiss-string.json",
+      "reason": "boolean field holds a quoted boolean"
+    },
+    {
       "file": "clarify-request-expires-at.json",
       "reason": "clarify.request has no expiry field"
+    },
+    {
+      "file": "corr-null.json",
+      "reason": "optional envelope field corr is null"
     },
     {
       "file": "extra-body-field.json",
@@ -297,12 +329,28 @@
       "reason": "msg.out.text > 2048"
     },
     {
+      "file": "ping-body-extra-key.json",
+      "reason": "unknown key in the empty ping body"
+    },
+    {
       "file": "seq-on-msg-in.json",
       "reason": "seq forbidden on D->S-only types"
     },
     {
       "file": "seq-on-ping.json",
       "reason": "keepalives never carry seq"
+    },
+    {
+      "file": "seq-on-welcome.json",
+      "reason": "welcome is outside the numbering and never carries seq (T1.09a)"
+    },
+    {
+      "file": "seq-string.json",
+      "reason": "seq is a string"
+    },
+    {
+      "file": "type-number.json",
+      "reason": "type is a number"
     },
     {
       "file": "unknown-type.json",
@@ -410,6 +458,24 @@
   ],
   "codec-invalid": [
     {
+      "file": "d2s-ack-up-to-seq-decimal.json",
+      "dir": "d2s",
+      "rule": "2.0 in an integer field",
+      "field": "integer"
+    },
+    {
+      "file": "d2s-ack-up-to-seq-exponent.json",
+      "dir": "d2s",
+      "rule": "1e0 in an integer field (JSON Schema counts it as an integer)",
+      "field": "integer"
+    },
+    {
+      "file": "d2s-ack-version-decimal.json",
+      "dir": "d2s",
+      "rule": "v is 1.0, not the integer 1",
+      "field": "integer"
+    },
+    {
       "file": "d2s-error-with-seq.json",
       "dir": "d2s",
       "rule": "seq on a D->S error (a D->S frame never has seq)",
@@ -466,6 +532,12 @@
       "limit": 4096
     },
     {
+      "file": "s2d-msg-out-seq-exponent.json",
+      "dir": "s2d",
+      "rule": "seq 7e0 is not an integer literal",
+      "field": "integer"
+    },
+    {
       "file": "s2d-msg-out-text-2050b-cyrillic.json",
       "dir": "s2d",
       "rule": "byte limit exceeded: 1025 x 2-byte chars",
@@ -503,6 +575,138 @@
       "rule": "nesting depth 33 > 32",
       "field": "skill.call.args",
       "depth": 33
+    }
+  ],
+  "raw-invalid": [
+    {
+      "file": "d2s-ack-duplicate-body-key.json",
+      "dir": "d2s",
+      "defect": "repeated-key",
+      "rule": "upToSeq repeated in the body"
+    },
+    {
+      "file": "d2s-ack-duplicate-envelope-key.json",
+      "dir": "d2s",
+      "defect": "repeated-key",
+      "rule": "v repeated in the envelope (equal values still refused)"
+    },
+    {
+      "file": "d2s-ack-duplicate-key-escaped.json",
+      "dir": "d2s",
+      "defect": "repeated-key",
+      "rule": "upToSeq repeated, the second spelled with a \\u escape"
+    },
+    {
+      "file": "d2s-msg-in-origin-unquoted.json",
+      "dir": "d2s",
+      "defect": "not-json",
+      "rule": "enum value origin written without quotes",
+      "repair": {
+        "find": "\"origin\": ptt",
+        "replace": "\"origin\": \"ptt\""
+      }
+    },
+    {
+      "file": "d2s-msg-in-text-raw-newline.json",
+      "dir": "d2s",
+      "defect": "not-json",
+      "rule": "raw line feed (U+000A) inside a string",
+      "repair": {
+        "find": "what time\nis it",
+        "replace": "what time\\nis it"
+      }
+    },
+    {
+      "file": "d2s-msg-in-text-raw-tab.json",
+      "dir": "d2s",
+      "defect": "not-json",
+      "rule": "raw tab (U+0009) inside a string",
+      "repair": {
+        "find": "what\ttime is it",
+        "replace": "what\\ttime is it"
+      }
+    },
+    {
+      "file": "d2s-skill-manifest-duplicate-item-key.json",
+      "dir": "d2s",
+      "defect": "repeated-key",
+      "rule": "key repeated inside a skills[] item"
+    },
+    {
+      "file": "d2s-skill-manifest-item-bareword.json",
+      "dir": "d2s",
+      "defect": "not-json",
+      "rule": "unquoted word inside a skills[] item",
+      "repair": {
+        "find": "\"extra\": abc",
+        "replace": "\"extra\": \"abc\""
+      }
+    },
+    {
+      "file": "d2s-skill-manifest-item-single-quoted.json",
+      "dir": "d2s",
+      "defect": "not-json",
+      "rule": "single-quoted string inside a skills[] item",
+      "repair": {
+        "find": "\"extra\": 'x'",
+        "replace": "\"extra\": \"x\""
+      }
+    },
+    {
+      "file": "d2s-skill-result-duplicate-open-key.json",
+      "dir": "d2s",
+      "defect": "repeated-key",
+      "rule": "key repeated inside the open object output"
+    },
+    {
+      "file": "d2s-skill-result-output-exponent-overflow.json",
+      "dir": "d2s",
+      "defect": "not-json",
+      "rule": "1e999 in the open object output (not a finite number)",
+      "repair": {
+        "find": "\"percent\": 1e999",
+        "replace": "\"percent\": 30"
+      }
+    },
+    {
+      "file": "d2s-skill-result-output-infinity.json",
+      "dir": "d2s",
+      "defect": "not-json",
+      "rule": "Infinity in the open object output",
+      "repair": {
+        "find": "\"percent\": Infinity",
+        "replace": "\"percent\": 30"
+      }
+    },
+    {
+      "file": "d2s-skill-result-output-leading-zero.json",
+      "dir": "d2s",
+      "defect": "not-json",
+      "rule": "leading zero in the open object output",
+      "repair": {
+        "find": "\"percent\": 01",
+        "replace": "\"percent\": 30"
+      }
+    },
+    {
+      "file": "d2s-skill-result-output-nan.json",
+      "dir": "d2s",
+      "defect": "not-json",
+      "rule": "NaN in the open object output",
+      "repair": {
+        "find": "\"percent\": NaN",
+        "replace": "\"percent\": 30"
+      }
+    },
+    {
+      "file": "d2s-skill-result-output-plus-sign.json",
+      "dir": "d2s",
+      "defect": "not-json",
+      "rule": "plus sign in the open object output",
+      "repair": {
+        "find": "\"percent\": +1",
+        "replace": "\"percent\": 30"
+      }
     }
   ]
 }

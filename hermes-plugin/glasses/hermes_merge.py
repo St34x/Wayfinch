@@ -1,16 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 """The glasses platform block of a Hermes config as the pinned gateway merges it (pure, no Hermes import).
 
-``config check`` must validate what the gateway validates. At the pinned Hermes (a4648c5f58) the gateway
+``config check`` must validate what the gateway validates. At the pinned Hermes (d923a5eb48) the gateway
 does not read only ``gateway.platforms.glasses.extra``:
 
-* ``gateway/config_loader.py:139-171`` ``merge_platform_sections``: the blocks ``gateway.platforms.glasses``
+* ``gateway/config_loader.py:139-173`` ``merge_platform_sections``: the blocks ``gateway.platforms.glasses``
   -> ``platforms.glasses`` -> ``gateway.glasses`` are merged in that order (later wins per key; their
   ``extra`` mappings are merged the same way);
-* ``gateway/config.py:446-453`` ``PlatformConfig.from_dict``: every key of the merged block that is not a
+* ``gateway/config.py:445-452`` ``PlatformConfig.from_dict``: every key of the merged block that is not a
   typed ``PlatformConfig`` field (``_TYPED_KEYS``) is promoted into ``extra``; an explicit ``extra`` value
-  wins on a clash -- so ``gateway.platforms.glasses.host`` or ``.allow_from`` count like ``extra.host``;
-* ``gateway/config_loader.py:182-191, 226-245, 333-374``: a top-level ``glasses:`` block wins as the
+  wins on a clash -- so ``gateway.platforms.glasses.bridge_port`` or ``.allow_from`` count like ``extra.bridge_port``;
+* ``gateway/config_loader.py:184-193, 228-244, 335-376``: a top-level ``glasses:`` block wins as the
   platform section; its non-typed keys and its own ``extra`` are bridged into ``extra`` (authored
   ``extra`` from the merged blocks wins), and its ``enabled`` is used.
 
@@ -27,7 +27,7 @@ from typing import Any
 
 from .config_core import PLATFORM_NAME
 
-# PlatformConfig._TYPED_KEYS at the pin (gateway/config.py:440-443); every other block key goes to extra.
+# PlatformConfig._TYPED_KEYS at the pin (gateway/config.py:439-442); every other block key goes to extra.
 HERMES_TYPED_KEYS = frozenset({
     "enabled",
     "token",

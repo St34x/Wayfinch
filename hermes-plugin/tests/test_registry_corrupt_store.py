@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Device registry on a corrupt or hostile state dir: every kind of
 corrupt on-disk entry, deep nesting, a huge file, unsafe lock files, stale temps, the no-early-return guard of
-``verify``, and no token or token hash in any exception or log line. Open defects are strict xfails."""
+``lookup``, and no token or token hash in any exception or log line."""
 
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ import pytest
 
 from glasses import config as gcfg
 from glasses import registry as reg
+from glasses import registry_parse as rp
 
 FP_A, FP_B, FP_C = "ab" * 32, "cd" * 32, "ef" * 32
 NOW = datetime(2026, 10, 5, 12, 0, 0, tzinfo=UTC)
@@ -38,8 +39,8 @@ def _sha(token: str) -> str:
 def _calls(registry, token):
     return {
         "list": registry.list,
-        "verify": lambda: registry.verify(token, FP_A),
-        "revoked_fingerprint": lambda: registry.revoked_fingerprint(FP_A),
+        "lookup-device": lambda: registry.lookup(token, FP_A)[0],
+        "lookup-tombstone": lambda: registry.lookup("x" * 43, FP_A)[1],
         "add": lambda: registry.add("Other", FP_B, []),
     }
 
@@ -75,6 +76,7 @@ CORRUPT = {
     "deviceId not hex": _set("deviceId", "z" * 16),
     "features of ints": _set("features", [1]),
     "features a string": _set("features", "x"),
+    "features of strings": _set("features", ["x"]),  # add() writes none; the first writer sets the bound
     "createdAt null": _set("createdAt", None),
     "lastSeen int": _set("lastSeen", 5),
     "revokedAt empty but token kept": _set("revokedAt", ""),
@@ -116,15 +118,14 @@ def test_every_kind_of_corrupt_entry_is_a_typed_error_everywhere(registry, state
     assert (state_dir / reg.FILE_NAME).read_bytes() == edited != before  # a failed add never rewrites it
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="known gap: certFingerprint null passes _valid_entry "
-    "(_norm_fp(None) == None); verify then raises TypeError, list/add accept it",
-)
-def test_null_fingerprint_on_disk_is_corrupt(registry, state_dir, caplog):
+@pytest.mark.parametrize("operation", ["list", "add", "lookup-device", "lookup-tombstone"])
+def test_null_fingerprint_on_disk_is_corrupt(registry, state_dir, caplog, operation):
     _, token = registry.add("Phone", FP_A, ["work"])
     _edit(state_dir, _set("certFingerprint", None))
-    _assert_all_corrupt(registry, token, caplog)
+    with pytest.raises(reg.RegistryCorruptError) as info:  # not a TypeError, and not accepted
+        _calls(registry, token)[operation]()
+    assert token not in str(info.value) and _sha(token) not in str(info.value)
+    assert token not in caplog.text and _sha(token) not in caplog.text
 
 
 def test_null_fingerprint_never_authenticates(registry, state_dir):
@@ -132,8 +133,8 @@ def test_null_fingerprint_never_authenticates(registry, state_dir):
     _, token = registry.add("Phone", FP_A, ["work"])
     _edit(state_dir, _set("certFingerprint", None))
     try:
-        assert registry.verify(token, FP_A) is None
-    except Exception as exc:  # TypeError today (xfail above), RegistryCorruptError once fixed
+        assert registry.lookup(token, FP_A)[0] is None
+    except reg.RegistryCorruptError as exc:  # fail closed and typed: a TypeError would escape this test
         assert token not in str(exc) and _sha(token) not in str(exc)
 
 
@@ -164,6 +165,68 @@ def test_odd_documents_are_typed_corrupt_errors(registry, state_dir, caplog, raw
     _assert_all_corrupt(registry, token, caplog)
 
 
+REPEATED_KEY = {
+    "version": lambda t: t.replace('"version": 1', '"version": 1,\n  "version": 1'),
+    "name": lambda t: t.replace('"name": "Phone"', '"name": "Phone",\n      "name": "Phone"'),
+    "certFingerprint": lambda t: t.replace(
+        f'"certFingerprint": "{FP_A}"', f'"certFingerprint": "{FP_A}", "certFingerprint": "{FP_B}"'
+    ),
+}
+
+
+@pytest.mark.parametrize("repeat", REPEATED_KEY.values(), ids=REPEATED_KEY.keys())
+def test_repeated_json_key_is_a_typed_corrupt_error(registry, state_dir, caplog, repeat):
+    _, token = registry.add("Phone", FP_A, ["work"])
+    path = state_dir / reg.FILE_NAME
+    text = path.read_text()
+    path.write_text(repeat(text))
+    assert path.read_text() != text  # the repetition was planted
+    _assert_all_corrupt(registry, token, caplog)
+
+
+def _maximal_entry(i: int) -> dict:
+    """The largest valid entry: a 64-character astral name (12 bytes each when escaped), 32 distinct 32-char lanes."""
+    return {
+        "deviceId": f"{i:016x}",
+        "name": "\U0001f600" * rp.NAME_MAX,
+        "tokenSha256": f"{i:064x}",
+        "certFingerprint": f"{i:064x}",
+        "lanes": ["a" + f"{k:031d}" for k in range(gcfg.MAX_LANES)],
+        "features": [],
+        "createdAt": "2026-10-05T12:00:00Z",
+        "lastSeen": "2026-10-05T12:00:00Z",
+        "revokedAt": None,
+    }
+
+
+def _dump(entries: list) -> str:
+    return json.dumps({"version": 1, "devices": entries}, indent=2, sort_keys=True) + "\n"
+
+
+def test_size_cap_holds_over_a_thousand_maximal_entries(registry, state_dir):
+    assert len(_dump([_maximal_entry(1), _maximal_entry(2)])) - len(_dump([_maximal_entry(1)])) == 2583  # docstring
+    count = 1_600
+    text = _dump([_maximal_entry(i) for i in range(count)])
+    assert len(text.encode()) <= rp.MAX_FILE_BYTES == 4 * 1024 * 1024
+    state_dir.mkdir(mode=0o700)
+    path = state_dir / reg.FILE_NAME
+    path.write_text(text)
+    path.chmod(0o600)
+    assert len(registry.list()) == count
+
+
+def test_file_over_the_cap_is_corrupt_despite_valid_json(registry, state_dir, caplog):
+    _, token = registry.add("Phone", FP_A, ["work"])
+    path = state_dir / reg.FILE_NAME
+    text = path.read_text()
+    path.write_text(text + " " * (rp.MAX_FILE_BYTES - len(text)))  # exactly at the cap: accepted
+    assert len(registry.list()) == 1
+    path.write_text(text + " " * (rp.MAX_FILE_BYTES - len(text) + 1))  # one byte over: valid JSON, refused
+    _assert_all_corrupt(registry, token, caplog)
+    with pytest.raises(reg.RegistryCorruptError, match=str(rp.MAX_FILE_BYTES)):
+        registry.list()
+
+
 def test_huge_file_is_rejected_without_hanging(registry, state_dir, caplog):
     _, token = registry.add("Phone", FP_A, ["work"])
     junk = ",".join(['"' + "x" * 1000 + '"'] * 20_000)  # ~20 MB of non-entries
@@ -174,9 +237,9 @@ def test_huge_file_is_rejected_without_hanging(registry, state_dir, caplog):
 
 
 def test_registry_lane_bound_is_the_config_bound(registry, state_dir):
-    assert reg.MAX_LANES is gcfg.MAX_LANES and reg.LANE_RE is gcfg.LANE_RE
+    assert rp.MAX_LANES is gcfg.MAX_LANES and rp.LANE_RE is gcfg.LANE_RE
     _, token = registry.add("Phone", FP_A, [f"l{i}" for i in range(gcfg.MAX_LANES)])
-    assert registry.verify(token, FP_A) is not None
+    assert registry.lookup(token, FP_A)[0] is not None
     with pytest.raises(reg.InvalidDeviceError):
         registry.add("Other", FP_B, [f"l{i}" for i in range(gcfg.MAX_LANES + 1)])
 
@@ -233,11 +296,11 @@ def test_reads_never_sweep(registry, state_dir):
     stale = state_dir / f".{reg.FILE_NAME}.crash.tmp"
     stale.write_text("{}")
     registry.list()
-    registry.verify("x" * 43, FP_A)
+    registry.lookup("x" * 43, FP_A)[0]
     assert stale.exists()  # only writers (under the lock) sweep
 
 
-# -- constant-time verify: no early return -----------------------------------------------------------
+# -- constant-time lookup: no early return -----------------------------------------------------------
 
 
 @pytest.fixture
@@ -263,7 +326,7 @@ def test_verify_compares_every_entry_in_every_outcome(spied, registry, case):
         "right-token-wrong-fp": (t2, FP_A, None),
         "wrong-token-right-fp": (t0, FP_B, None),
     }[case]
-    assert registry.verify(token, fp) == want
+    assert registry.lookup(token, fp)[0] == want
     assert len(seen) == 2 * len(issued)
     assert all(token not in pair for pair in seen) and all(t not in pair for pair in seen for t in (t0, t1, t2))
 
@@ -274,10 +337,10 @@ def test_verify_compares_every_entry_in_every_outcome(spied, registry, case):
 def test_no_token_or_hash_in_logs_over_a_lifecycle(registry, state_dir, caplog, monkeypatch):
     caplog.set_level(logging.DEBUG)
     device, token = registry.add("Phone", FP_A, ["work"])
-    registry.verify(token, FP_A)
-    registry.verify(token, FP_B)
+    registry.lookup(token, FP_A)[0]
+    registry.lookup(token, FP_B)[0]
     monkeypatch.setattr(reg, "_fsync_dir", lambda _p: (_ for _ in ()).throw(OSError("io")))
     registry.revoke(device.device_id)
-    registry.revoked_fingerprint(FP_A)
+    registry.lookup("x" * 43, FP_A)[1]
     registry.list()
     assert caplog.records and token not in caplog.text and _sha(token) not in caplog.text

@@ -13,8 +13,10 @@ messaging, media...), and every action with side effects needs your explicit OK.
 hints on the glasses and a written summary afterwards.
 
 > **Status: pre-alpha. Nothing here is usable end to end yet.** The protocol, the plugin's configuration and
-> device-registry foundations, and the engineering gates exist and are tested. The Android app, the glasses driver,
-> the HUD and the live transport do not exist yet. See [Status](#status).
+> device-registry foundations, and the engineering gates exist and are tested. Of the Android app a skeleton,
+> the envelope types, the enrolment-link parser and the revocation classifier exist; the vendored glasses driver
+> is not compiled yet, and the HUD and the live transport end to end (TLS edge examples, the app's link) do not
+> exist. See [Status](#status).
 
 ## How it works
 
@@ -36,7 +38,7 @@ flowchart LR
     G <-->|"BLE"| A
     A -->|"command audio, short-lived token"| S
     A <-->|"WSS, mTLS + device token"| P
-    P <-->|"loopback"| GP
+    P <-->|"unix socket"| GP
     GP <--> AG
     AG -.->|"long answers"| C
 ```
@@ -60,33 +62,39 @@ Every document: [docs/README.md](docs/README.md).
 
 ## Status
 
-What exists **today** on `main` (each item has tests in `make test`; the test Hermes instance itself is started by
+What exists **today** on `main` (each item has tests, run by `make test` unless its row says otherwise; the test Hermes instance itself is started by
 hand):
 
 | Area | What is there | Where |
 |---|---|---|
 | Protocol | Envelope v1 as JSON Schema 2020-12 (27 frame types, UTF-8 byte limits, delivery rules, close codes), golden valid/invalid fixtures and codec edge-case fixtures | [`protocol/`](protocol/) |
-| Envelope codec (server side) | Pure-core `decode`/`encode` of envelope v1: frame caps checked before parsing, strict JSON (no repeated keys, no `NaN`/`Infinity`, no lone surrogates), the schema, UTF-8 byte limits, nesting depth and the `seq` direction rules; error frames with a fixed message that never echoes input; helpers that cut text to a UTF-8 byte limit and replace bidi controls in card text. A library only: the caller injects the schema, and nothing calls the codec until the WebSocket server lands | `envelope*.py` |
-| Code generation | In-tree, stdlib-only generators: protocol schema → Python `TypedDict`s, and plugin config schema → [configuration reference](docs/reference/config.md); committed output is checked for freshness | [`tools/codegen/`](tools/codegen/), [`hermes-plugin/glasses/generated/`](hermes-plugin/glasses/generated/) |
-| Plugin skeleton | Hermes platform registration; an adapter that **fails closed** (reports "not connected", delivers nothing) until the transport lands; refusal of any allow-all / wildcard user setting | [`hermes-plugin/glasses/`](hermes-plugin/glasses/) |
+| Envelope codec (server side) | Pure-core `decode`/`encode` of envelope v1: frame caps checked before parsing, strict JSON (no repeated keys, no `NaN`/`Infinity`, no lone surrogates), the schema, UTF-8 byte limits, nesting depth and the `seq` direction rules; error frames with a fixed message that never echoes input; helpers that cut text to a UTF-8 byte limit and replace bidi controls in card text. The WebSocket session (`server_session.py`, run by `server.py`) calls it on every frame; the adapter loads the schema from `generated/` and injects it, and the session is served on the edge's unix socket only | `envelope*.py` |
+| Code generation | In-tree, stdlib-only generators: protocol schema → Python `TypedDict`s, a byte copy of the schema that the adapter loads and the Kotlin envelope types (`android/protocol/.../generated/Envelope.kt`), and plugin config schema → [configuration reference](docs/reference/config.md); committed output is checked for freshness | [`tools/codegen/`](tools/codegen/), [`hermes-plugin/glasses/generated/`](hermes-plugin/glasses/generated/) |
+| Plugin adapter | Hermes platform registration; an adapter that **fails closed**: `connect()` starts the edge listener only while the allow-all gate is closed and the edge settings are usable, otherwise it reports "not connected" and retries; a `msg.in` on an allowed lane becomes a Hermes text event whose user id is the device id (allow it in `GLASSES_ALLOWED_USERS`), other frames are not dispatched yet and `send()` stores each answer in the outbox for every non-revoked device holding the lane and delivers it (once, in order, replayed after a reconnect); refusal of any allow-all / wildcard user setting | [`hermes-plugin/glasses/`](hermes-plugin/glasses/) |
 | Plugin config | JSON Schema for the plugin config with precise error messages and a generated [configuration reference](docs/reference/config.md); `config check` CLI (static checks, plus `--live` checks against a Hermes install) | `config.schema.json`, `config*.py`, `admin.py` |
 | Device registry | Token stored only as SHA-256, constant-time verification, revocation with tombstones, atomic `0600` writes, fails closed on a corrupt or foreign-owned file | `registry.py` |
-| Signer client, `/enroll` relay, admin CLI | A client for the unix socket of the separate device-CA signer (a service built outside this repository, planned; the plugin holds no CA key and the tests use a fake signer): strict request and answer checks, owner and peer-uid checks, one deadline per call. The `/enroll` relay (request checks, rate limit, then the signer's `enrol` op); no HTTP server mounts it yet. The `glasses-admin` commands `config check`, `crl`, `crl --check` and `revoke` ([reference](docs/admin-cli.md)) | `signer_client.py`, `enroll.py`, `admin*.py`, `crl_check.py` |
+| Signer client, `/enroll` relay, admin CLI | A client for the unix socket of the separate device-CA signer (a service built outside this repository, planned; the plugin holds no CA key and the tests use a fake signer): strict request and answer checks, owner and peer-uid checks, one deadline per call. The `/enroll` relay (request checks, rate limit, then the signer's `enrol` op), mounted by `server.py` and served on the edge's unix socket. The `glasses-admin` commands `config check`, `crl`, `crl --check` and `revoke` ([reference](docs/admin-cli.md)) | `signer_client.py`, `enroll.py`, `admin*.py`, `crl_check.py` |
 | Test harness | Scripts for an isolated test instance of a pinned Hermes Agent with a minimal test platform and a mock LLM on loopback ports, never touching a real install ([setup](docs/test-hermes.md)); `make test` checks the scripts against a fake `hermes` | [`tools/test-hermes/`](tools/test-hermes/), [`tools/mock-llm/`](tools/mock-llm/) |
-| Quality gates | Secret scan, SPDX headers, size limits, repo hygiene (task ids on `TODO`s, unique glossary terms, no private references), module READMEs, ruff, mypy `--strict` (with a ratchet for modules not typed yet), the Python 3.11 floor, import boundaries, codegen freshness (protocol types and the configuration reference), plugin coverage (core files ≥90 %, other files ≥70 %), hash-pinned installs; docs gates: internal links and anchors resolve and every public document is indexed, a generated [make-target reference](docs/reference/make-targets.md) that must match `mk/*.mk` and the gate table, and a dependency ledger that must list exactly the direct dependencies at their pins | [`mk/`](mk/), [`tools/quality/`](tools/quality/) |
+| Quality gates | Secret scan, SPDX headers, size limits, repo hygiene (task ids on `TODO`s, unique glossary terms, no private references), module READMEs, ruff, mypy `--strict` (with a ratchet for modules not typed yet), the Python 3.11 floor, import boundaries, codegen freshness (protocol types, the schema copy and the configuration reference), plugin coverage (core files ≥90 %, other files ≥70 %), hash-pinned installs; docs gates: internal links and anchors resolve and every public document is indexed, a generated [make-target reference](docs/reference/make-targets.md) that must match `mk/*.mk` and the gate table, and a dependency ledger that must list exactly the direct dependencies at their pins; the Gradle wrapper pins (`check-android-wrapper`), the Kotlin gate thresholds (`check-kotlin-gate-config`) and the vendored-driver import check (`check-upstream-import`) | [`mk/`](mk/), [`tools/quality/`](tools/quality/) |
+| Android pure Kotlin modules | `:protocol`: the generated envelope types (`Envelope.kt`) with a strict decoder, the strict JSON reader, the enrolment-link parser with the proof, request and answer checks, and the revocation classifier; `:core`: the revocation sequence and its persisted flag. The other four pure modules are empty. Built and tested with `make test-android` (JDK and Android SDK), not by `make test` | [`android/protocol/`](android/protocol/), [`android/core/`](android/core/) |
 
-**Planned** (designed, not built): the WebSocket server with device authentication, which will be the codec's first
-caller; the outbox;
-approval and clarify cards; the voice path; the rest of enrolment and revocation: the HTTP server that mounts `/enroll`,
+**Built, served on the edge's unix socket only** (the WebSocket session with device authentication, the connection table and the `/enroll`
+mount are in `server.py`, `server_session.py`, `server_auth.py`, `connections.py`; the listener is `edge_listener.py`; no TCP).
+**Planned** (designed, not built):
+approval and clarify cards; the voice path; the rest of enrolment and revocation:
 the signer service itself (built outside this repository), the app's enrolment client, `glasses-admin list` (T1.15f),
 the admin-socket server with the live cut that `revoke` asks for (T1.63a), and the plugin's daily `crl --check` run
 (schedule it yourself until then:
 [CRL has expired](docs/troubleshooting/nginx-crl-expired-rejects-all-devices.md)); the long-answer
 router; reverse-proxy examples; and the whole **Android app**: the G2 Bluetooth driver, the HUD, the companion screen,
 enrolment, phone skills and the phone bridge. Meeting mode comes later still. Also still to come: CI, the Kotlin
-gates, the licence check, the CLI reference and doc tests (see [ENGINEERING.md §10](ENGINEERING.md#10-gates)). The
-`android/` directory is an empty placeholder today. The HUD and
-the companion screen are designed and mocked up at the real display resolution, but none of that is code yet.
+module-boundary and coverage gates, the licence check, the CLI reference and doc tests (see [ENGINEERING.md §10](ENGINEERING.md#10-gates)). The
+`android/` directory holds the app skeleton today: the Gradle root, six pure Kotlin modules (`:protocol` and `:core`
+as in the table above, the other four empty) and eight Android modules with their manifests, the network security config, the backup rules, two placeholder activities and the
+security tests over the merged manifest ([android/README.md](android/README.md)). It has no QR scanner and no camera
+permission, and it is built and tested on a machine with a JDK and the Android SDK (`make test-android`), not by `make test`. The HUD and
+the shell (the phone screens with the companion face) are designed and mocked up at the real display resolution, but
+none of that is code yet.
 
 Known limits of the first release, by design: G2 glasses only; Android 17 (API level 37) only; a Hermes gateway and a
 TLS reverse proxy with client-certificate support are required.
@@ -101,11 +109,11 @@ powerful tools, so it is treated like a privileged credential:
   server stores only as a hash. *(Registry and the device CRL commands (`crl` through the signer, `crl --check`):
   built. The device CA and certificate issuance live in a separate signer service (planned); the plugin holds no CA
   key. The revocation command `revoke` (signer `revoke`, then the plugin's admin socket): built; the live cut and the
-  admin-socket server: planned (T1.63a). The `/enroll` relay in the plugin: built, mounted by nothing yet (T1.07).
+  admin-socket server: planned (T1.63a). The `/enroll` relay in the plugin: built, mounted by `server.py` and served on the edge socket.
   Enrolment in the app and the signer service: planned.)*
 - **Instant revocation.** Revoking a device cuts its live connection within a second, purges its outbox, denies its
   pending approvals and closes its phone-bridge sessions. This is done by the plugin itself, so it does not depend on
-  the proxy's CRL support. *(Registry tombstones: built. Live cut: planned.)*
+  the proxy's CRL support. *(Signer revocations close an open session within about a second (stat poll); the plugin's own live cut and its other hooks: planned (T1.63a).)*
 - **Least privilege.** Each device may use only its allow-listed lanes. Approvals from the glasses are limited to
   *allow once* or *deny*. Phone skills are opt-in. Widening phone access needs an on-phone biometric confirmation,
   and side-effect actions need a confirmation that the phone renders itself, so the agent cannot word it.
@@ -163,15 +171,18 @@ Solved problems are recorded one per file in [docs/troubleshooting/](docs/troubl
 ## Repository layout
 
 ```
-android/                Android app (placeholder; planned)
+android/                Android app skeleton: Gradle root, six pure Kotlin and eight Android modules (no features yet);
+                        android/third_party/ holds the vendored G2 driver (not compiled yet)
 hermes-plugin/glasses/  Hermes gateway platform plugin "glasses" (+ generated protocol types)
 hermes-plugin/tests/    plugin tests
 protocol/               envelope v1 JSON Schema, specification, fixtures, schema tests
-tools/codegen/          generators (protocol schema -> Python types, config schema -> config reference) and their checks
+tools/codegen/          generators (protocol schema -> Python types and Kotlin `Envelope.kt`, config schema -> config reference)
+                        and their checks
 tools/quality/          size, hygiene, module-README, import-purity, mypy-config and coverage checkers, tests, baselines
 tools/test-hermes/      isolated, pinned Hermes Agent test instance (harness scripts)
 tools/mock-llm/         OpenAI-compatible mock LLM for deterministic integration tests
-tools/*.sh              secret scan (pinned gitleaks) and SPDX check
+tools/upstream-sync/    offline check of the vendored G2 driver against its pinned upstream files
+tools/*.sh              secret scan (pinned gitleaks), SPDX check and Gradle wrapper check
 tools/tests/            shell tests of those scripts, the make wiring and the hash-pinned venv install
 mk/                     make fragments; each component wires in its own test target
 deploy/examples/        example plugin configuration (example.com values)
@@ -198,8 +209,9 @@ make help        # list the top-level targets
 
 Each gate also runs on its own, e.g. `make -f mk/protocol.mk test-protocol` or
 `make -f mk/typecheck-py.mk typecheck-py`. After editing `protocol/envelope.schema.json`, run
-`.local/venv-dev/bin/python tools/codegen/gen_protocol.py`; after editing `hermes-plugin/glasses/config.schema.json`,
-run `.local/venv-dev/bin/python tools/codegen/gen_config_docs.py`. Commit the regenerated files. The integration
+`sh tools/codegen/regenerate.sh .local/venv-dev/bin/python` (the Python types and the Kotlin `Envelope.kt`); after
+editing `hermes-plugin/glasses/config.schema.json`, run `.local/venv-dev/bin/python tools/codegen/gen_config_docs.py`.
+Commit the regenerated files. The integration
 instance (`make test-hermes-up` / `make test-hermes-down`) needs a pinned Hermes Agent clone and its own Python 3.14
 venv, and is not part of `make test`; setup: [docs/test-hermes.md](docs/test-hermes.md).
 

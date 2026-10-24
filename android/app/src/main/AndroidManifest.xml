@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- The app's own manifest. :app depends on every Android module, so its merged manifest is the whole app; the unit
+     tests under src/test check the merged release manifest (SAT-PL-01..09). Permissions: exactly the allowlist in
+     src/test/resources/sat/permission-allowlist.txt; a later task adds a row there, never silently. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <!-- Normal-protection prerequisite of the connectedDevice service type. -->
+    <uses-permission android:name="android.permission.CHANGE_NETWORK_STATE" />
+    <!-- androidx.core's guard permission for unexported dynamic receivers matters below API 33 only (minSdk 37). -->
+    <permission
+        android:name="${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+        tools:node="remove" />
+    <uses-permission
+        android:name="${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+        tools:node="remove" />
+
+    <application
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:label="${appName}"
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:supportsRtl="true"
+        android:taskAffinity="">
+
+        <!-- Slot: enrolment (T1.23b replaces the placeholder; only the wayfinch://enroll VIEW filter). -->
+        <activity
+            android:name=".enroll.EnrollActivity"
+            android:exported="true"
+            android:screenOrientation="portrait">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data
+                    android:host="enroll"
+                    android:scheme="wayfinch" />
+            </intent-filter>
+        </activity>
+
+        <!-- Slot: link service (T1.25a; exported="false", type connectedDevice only, SAT-PL-80). -->
+
+        <!-- Library components the app does not use (SAT-PL-01, -02). Without androidx.startup nothing is started at
+             process start: no ProcessLifecycleOwner (lifecycle-process), EmojiCompat or ProfileInstaller
+             (android/README.md, Invariants). Both classes come in at run time only, hence MissingClass is ignored. -->
+        <provider
+            android:name="androidx.startup.InitializationProvider"
+            tools:ignore="MissingClass"
+            tools:node="remove" />
+        <receiver
+            android:name="androidx.profileinstaller.ProfileInstallReceiver"
+            tools:ignore="MissingClass"
+            tools:node="remove" />
+
+        <!-- Slot: onboarding (T1.30). -->
+
+    </application>
+
+</manifest>

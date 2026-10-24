@@ -1,12 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Glasses access gate and limits: allow-all gate, gateway auth keys, message cap, long-answer threshold,
-strict strings. No Hermes import (conftest.py enforces it); the Hermes readers are faked.
+"""Glasses access gate: allow-all gate and the gateway auth keys. Message cap, long-answer threshold and strict
+strings: test_config_limits_and_strings.py. No Hermes import (conftest.py enforces it); the Hermes readers are faked.
 """
 
 from __future__ import annotations
 
 import ast
-import json
 import sys
 from types import SimpleNamespace
 
@@ -68,7 +67,7 @@ def test_parse_allowlist_matches_hermes_coerce_allow_set():
 def test_gateway_allow_all_with_empty_glasses_allowlist_is_a_violation(value):
     problems = gcfg.gate_violations(reader(GATEWAY_ALLOW_ALL_USERS=value))
     assert any(p.startswith("GATEWAY_ALLOW_ALL_USERS") for p in problems), problems
-    # Not consulted for glasses once an allowlist exists (gateway/authz_mixin.py:666-675).
+    # Not consulted for glasses once an allowlist exists (gateway/authz_mixin.py:667-676).
     assert gcfg.gate_violations(reader(GATEWAY_ALLOW_ALL_USERS=value, GLASSES_ALLOWED_USERS="dev_1")) == []
     assert gcfg.gate_violations(reader(GATEWAY_ALLOW_ALL_USERS=value, GATEWAY_ALLOWED_USERS="dev_1")) == []
 
@@ -131,7 +130,7 @@ class FakeHermes:
         return SimpleNamespace(
             platform_gate_env=lambda name, default="": (self.active.get(name) or default).strip(),
             build_profile_secret_scope=build,
-            installed_profiles=installed,
+            served_profiles=installed,
         )
 
 
@@ -150,9 +149,8 @@ def test_profile_env_allow_all_refuses_the_platform(monkeypatch, caplog):
 
 def test_profile_env_wildcard_refuses_the_platform(monkeypatch):
     use(monkeypatch, FakeHermes({"default": {"GLASSES_ALLOWED_USERS": "dev_1, *"}}))
-    assert gate.violations() == [
-        "profile default: GLASSES_ALLOWED_USERS contains a wildcard '*'; list device ids explicitly"
-    ]
+    (problem,) = gate.violations()
+    assert problem.startswith("profile default: GLASSES_ALLOWED_USERS contains a wildcard '*'; list device ids ")
     assert glasses.validate_config(pc({})) is False
 
 
@@ -161,7 +159,7 @@ def test_active_scope_is_read_with_hermes_reader(monkeypatch):
     assert any(v.startswith("active scope: GLASSES_ALLOWED_USERS") for v in gate.violations())
 
 
-def test_clean_profiles_pass_and_every_profile_is_read(monkeypatch):
+def test_clean_profiles_pass_and_every_served_profile_is_read(monkeypatch):
     fake = FakeHermes({"default": {"GLASSES_ALLOWED_USERS": "dev_1"}, "dev": {}, "support": {"X": "1"}})
     use(monkeypatch, fake)
     assert gate.violations() == []
@@ -178,14 +176,14 @@ def test_unreadable_profiles_fail_closed(monkeypatch):
 
 def test_gate_is_re_read_on_every_call(monkeypatch):
     # Runtime re-check: a value added after the adapter was built is seen by the next check
-    # (adapter.connect() and adapter.handle_message() call gate.violations() each time).
+    # (the adapter's cached check, test_gate.py, calls it again once its verdict has expired).
     scopes = {"default": {}, "dev": {}}
     use(monkeypatch, FakeHermes(scopes))
     assert glasses.validate_config(pc({})) is True
     scopes["dev"]["GLASSES_ALLOW_ALL_USERS"] = "1"
     assert gate.violations() == [
         "profile dev: GLASSES_ALLOW_ALL_USERS is set; it must never be set "
-        "(list device ids in GLASSES_ALLOWED_USERS instead)"
+        "(list device ids in GLASSES_ALLOWED_USERS instead); or remove the switch from that profile"
     ]
     del scopes["dev"]["GLASSES_ALLOW_ALL_USERS"]
     assert gate.violations() == []
@@ -209,7 +207,7 @@ def test_hermes_api_uses_hermes_names_when_hermes_is_loaded(monkeypatch):
         for parent in ("gateway", "gateway.platforms", "agent", "hermes_cli"):
             mp.setitem(sys.modules, parent, sys.modules.get(parent) or SimpleNamespace())
         assert [label for label, _ in gate.sources()] == ["process environment", "active scope", "profile dev"]
-        assert calls == [(True, True, True)]  # every installed profile, served or not
+        assert calls == [(True, False, False)]  # the served profiles only (test_gate.py)
         assert gate.violations()[0].startswith("profile dev: GLASSES_ALLOW_ALL_USERS is set")
 
 
@@ -224,10 +222,22 @@ def _method_calls(cls: ast.ClassDef, method: str) -> set[str]:
 
 
 def test_adapter_rechecks_gate_on_connect_and_every_inbound_event():
+    # Inbound events reach the gate through hand_on: handle_message delegates to it and the frame router
+    # (adapter_router.py) calls it directly, so hand_on must check the gate before the base class's handle_message.
     cls = _adapter_class()
-    assert "self.gate_ok" in _method_calls(cls, "connect")
-    assert "self.gate_ok" in _method_calls(cls, "handle_message")
-    assert "gate.violations" in _method_calls(cls, "gate_ok")
+    for method in ("connect", "hand_on"):
+        calls = _method_calls(cls, method)
+        assert "self.gate_ok_async" in calls
+        assert "self.gate_ok" not in calls  # the synchronous check would run a recompute on the event loop
+    assert _method_calls(cls, "handle_message") == {"self.hand_on"}
+    first = next(n for n in cls.body if isinstance(n, ast.AsyncFunctionDef) and n.name == "hand_on").body[1]
+    assert isinstance(first, ast.If) and ast.unparse(first.test) == "not await self.gate_ok_async()"
+    assert isinstance(first.body[-1], ast.Return)  # refused: the base class's handle_message is never reached
+    router = ast.parse((PLUGIN_DIR / "adapter_router.py").read_text())
+    routed = {ast.unparse(n.func) for n in ast.walk(router) if isinstance(n, ast.Call)}
+    assert "self._adapter.hand_on" in routed and not any("handle_message" in name for name in routed)
+    assert "asyncio.to_thread" not in _method_calls(cls, "gate_ok_async")
+    assert "self._gate_cache.violations" in _method_calls(cls, "gate_ok")
 
 
 # --------------------------------------------------------------------------------------------
@@ -280,145 +290,6 @@ def test_open_access_keys_in_extra_are_refused():
 
 
 def test_enabled_explicit_injected_by_hermes_is_silent():
-    # gateway/config_loader.py:161,373 put _enabled_explicit into extra.
+    # gateway/config_loader.py:162,375 put _enabled_explicit into extra.
     result = gcfg.check({"_enabled_explicit": True})
     assert result.errors == [] and result.warnings == []
-
-
-# --------------------------------------------------------------------------------------------
-# 5. one message cap; the gateway does not split what the planned long-answer router must see
-# --------------------------------------------------------------------------------------------
-
-
-def test_message_cap_is_one_constant_and_byte_safe():
-    assert gcfg.MAX_MESSAGE_LENGTH == (65_536 - 1_024) // 6 == 10_752
-    assert gcfg.MAX_MESSAGE_LENGTH >= 8192  # 8192 chars reach send() unsplit (for the planned long-answer router)
-    assert gcfg.MAX_MESSAGE_LENGTH > 4096  # above the gateway default it replaces
-    assert not hasattr(glasses, "MAX_MESSAGE_LENGTH") or glasses.MAX_MESSAGE_LENGTH == gcfg.MAX_MESSAGE_LENGTH
-
-
-@pytest.mark.parametrize("ch", ["a", "ж", "€", "😀", "\x01", '"', "\\", "\u2028"])
-def test_reply_at_the_cap_fits_one_protocol_frame(ch):
-    text = ch * gcfg.MAX_MESSAGE_LENGTH
-    frame = {
-        "v": 1,
-        "type": "msg.out",
-        "id": "0" * 36,
-        "ts": 1_790_000_000_000,
-        "body": {
-            "kind": "answer",
-            "chatId": "glasses:" + "a" * 32,
-            "final": True,
-            "longRef": {
-                "id": "0" * 36,
-                "channel": "telegram",
-                "profile": "p" * 32,
-                "status": "pending",
-                "fullText": text,
-            },
-        },
-    }
-    size = len(json.dumps(frame, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
-    assert size <= gcfg.FRAME_MAX_BYTES, size
-
-
-def test_adapter_class_sets_the_gateway_caps():
-    cls = _adapter_class()
-    assigns = {
-        t.id: ast.unparse(n.value)
-        for n in cls.body
-        if isinstance(n, ast.Assign)
-        for t in n.targets
-        if isinstance(t, ast.Name)
-    }
-    assert assigns["MAX_MESSAGE_LENGTH"] == "MAX_MESSAGE_LENGTH"  # imported from glasses.config
-    assert assigns["splits_long_messages"] == "True"
-    tree = ast.parse((PLUGIN_DIR / "adapter.py").read_text())
-    imports = {(n.module, a.name) for n in tree.body if isinstance(n, ast.ImportFrom) for a in n.names}
-    assert ("config", "MAX_MESSAGE_LENGTH") in imports
-
-
-def test_no_misleading_chunking_comment():
-    text = (PLUGIN_DIR / "__init__.py").read_text()
-    assert "Smart-chunking cap of the gateway" not in text
-    assert "MAX_MESSAGE_LENGTH = 2000" not in text
-
-
-# --------------------------------------------------------------------------------------------
-# 6/7. long_threshold default and the long-answer loop
-# --------------------------------------------------------------------------------------------
-
-
-def test_long_threshold_default_is_280():
-    assert gcfg.DEFAULTS["long_threshold"] == 280
-    assert gcfg.load({}).long_threshold == 280
-
-
-@pytest.mark.parametrize("value", ["glasses", "glasses:assistant", "Glasses"])
-def test_long_answers_platform_never_glasses(value):
-    assert any(e.startswith("long_answers.platform:") for e in gcfg.check({"long_answers": {"platform": value}}).errors)
-
-
-# --------------------------------------------------------------------------------------------
-# 1/2. full-match strings, strict public_url
-# --------------------------------------------------------------------------------------------
-
-
-def test_sources_use_fullmatch_only():
-    for path in sorted(PLUGIN_DIR.glob("*.py")):
-        text = path.read_text()
-        assert ".match(" not in text, path.name
-        assert "re.search(" not in text, path.name
-
-
-@pytest.mark.parametrize(
-    "extra,key",
-    [
-        ({"state_dir": "/srv/glasses\n"}, "state_dir"),
-        ({"state_dir": " /srv/glasses"}, "state_dir"),
-        ({"state_dir": "/srv/gl\x00asses"}, "state_dir"),
-        ({"signer": {"public_dir": "/srv/pub\n"}}, "signer.public_dir"),
-        ({"signer": {"socket": "/run/signer.sock "}}, "signer.socket"),
-        ({"signer": {"user": " signer"}}, "signer.user"),
-        ({"client_cert_encoding": "der-base64\n"}, "client_cert_encoding"),
-        ({"client_cert_header": " X-Client-Cert"}, "client_cert_header"),
-        ({"lanes": ["work "], "home_lane": ""}, "lanes"),
-        ({"lanes": [], "home_lane": " work"}, "home_lane"),
-        ({"long_answers": {"platform": "telegram "}}, "long_answers.platform"),
-        ({"host": "127.0.0.1\n"}, "host"),
-    ],
-)
-def test_whitespace_and_control_chars_rejected_in_every_string_key(extra, key):
-    errors = gcfg.check(extra).errors
-    assert any(e.split(":", 1)[0].split("[")[0] == key for e in errors), errors
-
-
-@pytest.mark.parametrize(
-    "url",
-    [
-        "wss://0.0.0.0/ws",
-        "wss://[::]/ws",
-        "wss://glasses.example.com:/ws",
-        "WSS://glasses.example.com/ws",
-        "wss://glässes.example.com/ws",
-        "wss://glasses.example.com./ws",
-        "wss://glasses..example.com/ws",
-        "wss://-glasses.example.com/ws",
-        "wss://glasses_x.example.com/ws",
-        "wss://127.1/ws",
-        "wss://glasses.example.com/w s",
-        "wss://glasses.example.com/ws\x7f",
-        "wss://[fe80::1%25lo]/ws",
-        "wss://" + "a" * 64 + ".example.com/ws",
-        "https://glasses.example.com/ws",
-        "wss://",
-        "wss:///ws",
-    ],
-)
-def test_public_url_strict_rejects(url):
-    assert any(e.startswith("public_url:") for e in gcfg.check({"public_url": url}).errors), url
-
-
-def test_public_url_error_never_echoes_the_value():
-    (msg,) = gcfg.check({"public_url": "wss://user:s3cr3t@glasses.example.com/ws\n"}).errors
-    assert "s3cr3t" not in msg and "glasses.example.com" not in msg

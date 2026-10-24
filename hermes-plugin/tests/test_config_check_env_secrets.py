@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 """``config check --live`` and the values of ``<home>/.env``: they are data. A ``${VAR}`` of a config file expands to
 one, and Hermes returns the result as a tool or profile name or quotes it in a log line: none of it reaches stdout or
-stderr (the values are masked, tool names not in Hermes' toolset table are only counted, profile names must be plain
-identifiers, Hermes' log is silent). Names that reach a line cannot forge a ``config check:`` line. What a ``.env``
-may make the checker do (run code, hang, be followed out of the home) is in test_config_check_env_overlay.py.
+stderr (tool names not in Hermes' toolset table are only counted, a route to an unserved profile is a placeholder,
+served profile names must be plain identifiers, Hermes' log is silent). Nothing is masked or compared with a value:
+the output does not depend on one (test_config_check_live_output_independent_of_env.py). Names that reach a line
+cannot forge a ``config check:`` line. What a ``.env`` may make the checker do (run code, hang, be followed out of
+the home) is in test_config_check_env_overlay.py.
 """
 
 from __future__ import annotations
@@ -14,7 +16,6 @@ import pytest
 import yaml
 
 from glasses import admin
-from glasses import hermes_env as he
 
 from test_config_check_edges import GOOD, _live_scratch, _real_live, _scratch, live_home, run_live
 
@@ -67,8 +68,10 @@ def test_real_live_a_dotenv_value_in_a_toolset_name_of_the_launch_home_is_not_pr
         user.mkdir()
         _edit(home, _toolset_with("${CANARY}"))
         proc = _run(home, user, f"CANARY={canary}\n")
-    assert proc.returncode == admin.EXIT_ERRORS, proc.stdout + proc.stderr[-2000:]
-    assert "only on glasses: <1 unknown toolset(s)>" in proc.stdout, proc.stdout
+    assert proc.returncode == admin.EXIT_OK, proc.stdout + proc.stderr[-2000:]
+    assert "warning: profile default: platform_toolsets: uses an environment reference, not checked" in proc.stdout, (
+        proc.stdout
+    )
     _assert_absent(proc, canary)
 
 
@@ -83,8 +86,10 @@ def test_real_live_a_dotenv_value_in_a_routed_profile_is_not_printed(canary):
         )
         assert work["platform_toolsets"]["glasses"] == ["web", "${W}"]
         proc = _run(home, user, "", f"W={canary}\n")
-    assert proc.returncode == admin.EXIT_ERRORS, proc.stdout + proc.stderr[-2000:]
-    assert "error: profile work: the glasses tool set differs from telegram" in proc.stdout, proc.stdout
+    assert proc.returncode == admin.EXIT_OK, proc.stdout + proc.stderr[-2000:]
+    assert "warning: profile work: platform_toolsets: uses an environment reference, not checked" in proc.stdout, (
+        proc.stdout
+    )
     _assert_absent(proc, canary)
 
 
@@ -100,8 +105,10 @@ def test_real_live_a_dotenv_value_as_a_route_profile_is_not_printed_and_hermes_l
         proc = _run(home, user, f"CANARY={canary}\n")
     _assert_absent(proc, canary)
     assert proc.stderr == "", proc.stderr  # Hermes' own "Skipping profile route ... invalid profile name" is silent
-    if canary != BASE64ISH:  # a valid name: the lane is routed to a profile nobody serves
-        assert proc.returncode == admin.EXIT_ERRORS and "is routed to profile" in proc.stdout, proc.stdout
+    assert (
+        proc.returncode == admin.EXIT_OK
+        and "warning: gateway.profile_routes: uses an environment reference, not checked" in proc.stdout
+    ), proc.stdout
 
 
 def test_real_live_the_dotenv_values_of_every_served_profile_are_hidden_where_they_land_in_a_name():
@@ -130,17 +137,11 @@ def _profile(**kw):
     return admin.ProfileFacts(**{**GOOD.__dict__, **kw})
 
 
-def test_mask_values_hides_every_case_of_every_value_longest_first():
-    assert he.mask_values("a SeCrEt-longer b secret c", ["secret", "secret-longer"]) == f"a {he.MASK} b {he.MASK} c"
-    assert he.mask_values("nothing here", []) == "nothing here"
-    assert he.secret_values({"A": "abc", "B": "abcd", "C": ""}) == {"abcd"}  # shorter values would blank words
-
-
-def test_a_value_in_a_name_that_is_known_and_an_identifier_is_still_masked(tmp_path):
+def test_a_known_toolset_name_equal_to_a_value_of_the_facts_is_still_named(tmp_path):
     odd = _profile(glasses_tools=frozenset({"web", "terminal"}), telegram_tools=frozenset({"web", "todo"}))
     facts = _facts(profiles={"default": GOOD, "work": odd}, env_values=frozenset({"terminal"}))
     code, out = run_live(live_home(tmp_path), facts)
-    assert code == admin.EXIT_ERRORS and "terminal" not in out and he.MASK in out, out
+    assert code == admin.EXIT_ERRORS and "only on glasses: terminal" in out, out
 
 
 def test_unknown_toolsets_are_counted_not_named(tmp_path):

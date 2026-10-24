@@ -17,11 +17,11 @@ import enroll_helpers
 import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer, make_mocked_request
-from enroll_helpers import BODY, app_with, exchange, post, relay_for, send
+from enroll_helpers import BODY, app_with, exchange, is_loopback_peer, post, relay_for, send
 from fake_signer import Script
 
 from glasses import enroll
-from glasses.enroll import BODY_CAP, MAX_IN_FLIGHT, EnrollRelay, RateLimiter, is_loopback_peer
+from glasses.enroll import BODY_CAP, MAX_IN_FLIGHT, EnrollRelay, RateLimiter
 
 JSON = {"Content-Type": "application/json"}
 
@@ -107,7 +107,9 @@ BAD_BODIES = {
 def test_a_malformed_body_is_400_never_500(fake, data):
     made: list[int] = []
     client = enroll_helpers.factory(fake)
-    relay = EnrollRelay(lambda: made.append(1) or client(), limiter=RateLimiter(per_minute=1000))
+    relay = EnrollRelay(
+        lambda: made.append(1) or client(), peer_allowed=is_loopback_peer, limiter=RateLimiter(per_minute=1000)
+    )
     assert post(relay, data=data).status == 400
     assert made == []  # refused by the relay itself: the "number"/"null" cases stop at its exact-str check
     assert fake.requests == []

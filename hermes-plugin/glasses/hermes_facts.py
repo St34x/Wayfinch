@@ -12,12 +12,12 @@ configs are read by ``read_gateway_config``/``read_profile_config``, which rebui
 their pure helpers. Each routed profile is read under the public ``hermes_constants.set_hermes_home_override``.
 An unexpected shape raises ``HermesContractError``.
 
-T1.45 contract-test list -- private Hermes APIs and copied Hermes behaviour (pinned a4648c5f58), each to
+T1.45 contract-test list -- private Hermes APIs and copied Hermes behaviour (pinned d923a5eb48), each to
 be pinned by a contract test so a Hermes bump fails loudly instead of drifting:
 
 * ``hermes_cli.tools_config._get_platform_tools(config, platform) -> set[str]`` (private; design D5a).
 * ``tools.transcription_tools._resolve_stt_language`` -- copied in ``hermes_facts.stt_language``:
-  ``stt.<provider>.language`` (+ ``language_code`` for elevenlabs, tools/transcription_cloud.py:336) >
+  ``stt.<provider>.language`` (+ ``language_code`` for elevenlabs, tools/transcription_cloud.py:346) >
   ``stt.language`` > env ``tools.transcription_common.LOCAL_STT_LANGUAGE_ENV`` (imported, not copied).
 * ``tools.approval_context._get_approval_timeout`` -- copied in ``hermes_facts.approvals_timeout``:
   ``int(approvals.timeout)``, 300 when missing or not a number (its upper clamp does not affect ``<= 0``).
@@ -53,17 +53,15 @@ be pinned by a contract test so a Hermes bump fails loudly instead of drifting:
 * ``hermes_env.read_env_file`` / ``environ_with`` -- ``agent.secret_scope.load_env_file`` (Hermes' ``.env``
   tokenizer; read only, never touches ``os.environ``) replaces ``hermes_cli.env_loader.load_hermes_dotenv``,
   which sanitises and rewrites the file. The file must be a regular file of at most 1 MiB; names that load code
-  or move directories (``PATH``, ``LD_*``, ``PYTHON*``, ``HOME``, ``TMPDIR``, ``HERMES_BUNDLED_PLUGINS``,
-  ``HERMES_ENABLE_PROJECT_PLUGINS``, ``HERMES_MANAGED_DIR``, ``HERMES_PLUGINS_*`` ...) are not overlaid.
+  or move directories (``PATH``, ``LD_*``, ``PYTHON*``, ``HOME``, ``HERMES_PLUGINS_*`` ...) are not overlaid.
   ``hermes_facts`` overlays ``<home>/.env`` on the process environment around ``read_gateway_config``, the allow-all
-  gate and each
-  profile's ``read_profile_config`` only (never around Hermes' plugin discovery: a ``.env`` cannot make a plugin run
-  here), and each profile read overlays that profile's own ``.env`` on top for its ``${VAR}`` refs (the gateway
-  resolves a routed profile's refs against its secret scope; a ref the scope lacks stays unresolved there, here it
-  falls back to the environment). ``HERMES_LOCAL_STT_LANGUAGE`` comes from the launch ``.env``, else the launch
+  gate and each profile's ``read_profile_config`` only (never around Hermes' plugin discovery), and each profile
+  read overlays that profile's own ``.env`` on top for its ``${VAR}`` refs (the gateway resolves a routed profile's
+  refs against its secret scope). ``HERMES_LOCAL_STT_LANGUAGE`` comes from the launch ``.env``, else the launch
   environment. Not loaded: ``.op.env``, the managed ``.env``, external secret sources. The environment is
-  restored afterwards. A value of 4+ characters is masked in the output (``hermes_env.mask_values``); a shorter
-  one or a process-environment value is hidden as a whole route name (``name_unless_from_env``) only.
+  restored afterwards. Environment references are not evaluated by the check (T1.196a): a field of ``config.yaml``
+  that holds ``${`` is not compared with anything and prints one fixed line (``glasses.hermes_refs``, decided from
+  the raw text); nothing is masked, and a route profile that is not served is the fixed ``HIDDEN_NAME``.
 * ``hermes_env.silenced_hermes`` -- ``logging.disable`` and a warnings filter around every Hermes call: Hermes
   logs quote config values (e.g. ``Skipping profile route ...: invalid profile name '<value>'``).
 * Shapes asserted at run time (``HermesContractError``, a clear error, never a silent default):
@@ -87,6 +85,7 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any
 
+from . import hermes_refs as refs
 from .config import PLATFORM_NAME, GlassesConfig
 from .hermes_env import (  # noqa: F401 - re-exported: admin and the tests use hermes_facts.environ_with etc.
     HOME_ENV,
@@ -95,16 +94,15 @@ from .hermes_env import (  # noqa: F401 - re-exported: admin and the tests use h
     env_file_is_unsafe,
     environ_with,
     hermes_home_env,
-    name_unless_from_env,
+    name_if_served,
     read_env_file,
-    secret_values,
     silenced_hermes,
 )
 
 DEFAULT_PROFILE = "default"
 BRIDGED_FLAG = "_BRIDGED_ALLOW_ALL_USERS"  # gateway.config_loader at the pin
 DEFAULT_APPROVALS_TIMEOUT = 300  # tools/approval_context.py _get_approval_timeout at the pin
-# Per-provider aliases of stt.<provider>.language (tools/transcription_cloud.py:336 at the pin).
+# Per-provider aliases of stt.<provider>.language (tools/transcription_cloud.py:346 at the pin).
 STT_LANGUAGE_ALIASES: Mapping[str, tuple[str, ...]] = {"elevenlabs": ("language_code",)}
 
 
@@ -122,17 +120,26 @@ class ProfileFacts:
     telegram_tools: frozenset[str]
     clarify_timeout: int
     approvals_timeout: int
+    # Fields config.yaml writes as an environment reference (``glasses.hermes_refs``): not evaluated, and the field
+    # above holds the value that raises no problem (stt_provider a placeholder, no language, equal empty
+    # tool sets, clarify timeout 0, approvals timeout 1); ``glasses.admin`` prints one fixed line per name.
+    unchecked: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
 class HermesFacts:
     served: frozenset[str]  # profiles this gateway serves
-    routes: Mapping[str, str]  # lane -> profile of its glasses:<lane> route (absent = default)
+    # lane -> profile of its glasses:<lane> route (absent = default): a served profile, else ``HIDDEN_NAME``
+    routes: Mapping[str, str]
     profiles: Mapping[str, ProfileFacts]
     gate_problems: tuple[str, ...] = ()
     known_toolsets: frozenset[str] = frozenset()  # the only tool names a message may show (anything else: a count)
-    # every overlaid .env value of four or more characters (``hermes_env.mask_values`` hides them)
+    # Always empty and ignored since T1.196a (``admin_names.mask_lines`` no longer masks): no environment value is
+    # kept in the facts. Dropped together with the ``mask_lines`` call of ``glasses.admin``.
     env_values: frozenset[str] = frozenset()
+    # Gateway fields written as an environment reference (``glasses.hermes_refs``): routing is then not evaluated
+    # (no served profile, no route, no profile facts) and ``glasses.admin`` prints one fixed line per name.
+    unchecked: tuple[str, ...] = ()
 
 
 def lanes_to_route(cfg: GlassesConfig) -> tuple[str, ...]:
@@ -208,26 +215,26 @@ def quarantined_import() -> Iterator[None]:
             reset_hermes_home_override(token)
 
 
-def read_profile_config(home: Path) -> dict[str, Any]:
-    """The config of the profile at *home* as ``hermes_cli.config.load_config_readonly`` builds it, minus its
-    writes: ``DEFAULT_CONFIG`` deep-merged with ``<home>/config.yaml``, canonical keys, ``${VAR}`` expansion,
-    managed overlay (copy of ``_load_config_impl``'s pure steps, T1.45 list). A file that does not parse raises.
-    """
+def merged_profile_config(home: Path) -> dict[str, Any]:
+    """``DEFAULT_CONFIG`` deep-merged with ``<home>/config.yaml``, canonical keys, NOT expanded: the first steps of
+    ``_load_config_impl`` (copy of its pure steps, T1.45 list). A file that does not parse raises."""
     import yaml
-    from hermes_cli.config import (
-        DEFAULT_CONFIG,
-        _canonicalize_config,
-        _deep_merge,
-        _expand_env_vars,
-        _merge_managed_overlay,
-    )
+    from hermes_cli.config import DEFAULT_CONFIG, _canonicalize_config, _deep_merge
 
     path = Path(home) / "config.yaml"
     user = yaml.safe_load(path.read_text(encoding="utf-8-sig")) if path.exists() else None
     if user is not None and not isinstance(user, dict):
         raise HermesContractError(f"a Hermes config.yaml is a {type(user).__name__}, not a mapping")
     merged = _deep_merge(copy.deepcopy(DEFAULT_CONFIG), user or {})
-    expanded, _managed = _merge_managed_overlay(_expand_env_vars(_canonicalize_config(merged)))
+    return dict(_canonicalize_config(merged))
+
+
+def read_profile_config(home: Path) -> dict[str, Any]:
+    """The config of the profile at *home* as ``hermes_cli.config.load_config_readonly`` builds it, minus its
+    writes: ``merged_profile_config`` with ``${VAR}`` expanded and the managed overlay (T1.45 list)."""
+    from hermes_cli.config import _expand_env_vars, _merge_managed_overlay
+
+    expanded, _managed = _merge_managed_overlay(_expand_env_vars(merged_profile_config(home)))
     return dict(expanded)
 
 
@@ -310,6 +317,8 @@ def profile_facts(home: Path, launch_env: Mapping[str, str] | None = None) -> Pr
     profile's config.yaml sees the process environment overlaid with *launch_env* (the launch home's ``.env``,
     see ``hermes_facts``) and the profile's own ``.env``: the gateway resolves a routed profile's refs against
     that profile's secret scope. The overlay covers the config read only, never the plugin discovery.
+
+    A field the raw ``config.yaml`` writes as an environment reference is not evaluated (``glasses.hermes_refs``).
     """
     launch_env = launch_env or {}
     with quarantined_import():
@@ -318,17 +327,25 @@ def profile_facts(home: Path, launch_env: Mapping[str, str] | None = None) -> Pr
         from tools.transcription_common import LOCAL_STT_LANGUAGE_ENV
 
         env_language = launch_env.get(LOCAL_STT_LANGUAGE_ENV, os.environ.get(LOCAL_STT_LANGUAGE_ENV, ""))
+        skip = refs.profile_unchecked(merged_profile_config(home))
         with environ_with({**launch_env, **read_env_file(home)}):
             config = read_profile_config(home)
         stt = section(config, "stt")
         provider = str(stt.get("provider") or "")
         return ProfileFacts(
-            stt_provider=provider,
-            stt_language=stt_language(stt, provider, env_language),
-            glasses_tools=_tool_names(_get_platform_tools(config, PLATFORM_NAME)),
-            telegram_tools=_tool_names(_get_platform_tools(config, "telegram")),
-            clarify_timeout=resolve_clarify_timeout(config),
-            approvals_timeout=approvals_timeout(config),
+            stt_provider=refs.unless_unchecked(refs.STT_PROVIDER, skip, refs.NOT_CHECKED_PLACEHOLDER, lambda: provider),
+            stt_language=refs.unless_unchecked(
+                refs.STT_LANGUAGE, skip, "", lambda: stt_language(stt, provider, env_language)
+            ),
+            glasses_tools=refs.unless_unchecked(
+                refs.TOOLSETS, skip, frozenset(), lambda: _tool_names(_get_platform_tools(config, PLATFORM_NAME))
+            ),
+            telegram_tools=refs.unless_unchecked(
+                refs.TOOLSETS, skip, frozenset(), lambda: _tool_names(_get_platform_tools(config, "telegram"))
+            ),
+            clarify_timeout=refs.unless_unchecked(refs.CLARIFY, skip, 0, lambda: resolve_clarify_timeout(config)),
+            approvals_timeout=refs.unless_unchecked(refs.APPROVALS, skip, 1, lambda: approvals_timeout(config)),
+            unchecked=tuple(sorted(skip)),
         )
 
 
@@ -359,19 +376,23 @@ def _hermes_facts(cfg: GlassesConfig) -> HermesFacts:
 
     home = get_hermes_home()
     launch_env = read_env_file(home)
+    unchecked = refs.gateway_unchecked(refs.read_raw_yaml(home))  # from the raw text: the environment is not looked at
+    routing = not unchecked & refs.ROUTING_FIELDS
     with environ_with(launch_env):
-        gw = read_gateway_config(home)
-        bridge = read_allow_all_bridge(home)
-    served = {name: Path(path) for name, path in profiles_to_serve(bool(gw.multiplex_profiles))}
-    served_envs = [read_env_file(path) for path in served.values()]
+        gw = read_gateway_config(home) if routing else None
+        bridge = {} if refs.ALLOW_ALL in unchecked else read_allow_all_bridge(home)
+    served: dict[str, Path] = {}
     routes: dict[str, str] = {}
-    for lane in lanes_to_route(cfg):
-        route = match_profile_route(gw.profile_routes or [], PLATFORM_NAME, chat_id=f"{PLATFORM_NAME}:{lane}")
-        name = route.profile if route else DEFAULT_PROFILE
-        routes[lane] = name_unless_from_env(name, served, launch_env, *served_envs, os.environ)
+    if gw is not None:
+        served = {name: Path(path) for name, path in profiles_to_serve(bool(gw.multiplex_profiles))}
+        for lane in lanes_to_route(cfg):
+            route = match_profile_route(gw.profile_routes or [], PLATFORM_NAME, chat_id=f"{PLATFORM_NAME}:{lane}")
+            routes[lane] = name_if_served(route.profile if route else DEFAULT_PROFILE, served)
     profiles = {name: profile_facts(served[name], launch_env) for name in set(routes.values()) if name in served}
-    secrets = secret_values(launch_env, *served_envs)
     unsafe = unsafe_env_problems(lambda: profiles_to_serve(True, include_standalone=True, include_parked=True))
     with environ_with(launch_env), allow_all_bridged(bridge):  # the gate also reads every profile's .env itself
         problems = unsafe or tuple(gate.violations())
-    return HermesFacts(frozenset(served), routes, profiles, problems, known, secrets)
+    problems += (refs.ALLOW_ALL_PROBLEM,) if refs.ALLOW_ALL in unchecked else ()
+    return HermesFacts(
+        frozenset(served), routes, profiles, problems, known, unchecked=tuple(sorted(unchecked & refs.ROUTING_FIELDS))
+    )

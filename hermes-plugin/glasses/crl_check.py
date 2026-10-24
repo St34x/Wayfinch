@@ -136,7 +136,7 @@ def load_crls(raw: bytes, name: str) -> list[x509.CertificateRevocationList]:
 
 
 def ca_id(cert: x509.Certificate) -> str:
-    """The signer's ``ca_id`` of a CA (brief section 11): 16 hex of the SHA-256 of its SubjectPublicKeyInfo."""
+    """The signer's ``ca_id`` of a CA (signer protocol): 16 hex of the SHA-256 of its SubjectPublicKeyInfo."""
     spki = cert.public_key().public_bytes(serialization.Encoding.DER, serialization.PublicFormat.SubjectPublicKeyInfo)
     return hashlib.sha256(spki).hexdigest()[:16]
 

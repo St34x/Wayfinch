@@ -10,19 +10,24 @@ Regenerate this file with `python3 tools/codegen/gen_make_docs.py`.
 
 | Target | Description | In `make test` | Defined in |
 |---|---|---|---|
-| `check-codegen` | generated protocol types and docs/reference/config.md match their schemas; the codegen tests | yes | `mk/codegen.mk` |
+| `check-android-wrapper` | the Gradle wrapper keeps its pinned URL and distribution SHA-256 (each key once) and the SHA-256 of its four files | yes | `mk/android.mk` |
+| `check-codegen` | generated protocol types, the shipped schema copy and docs/reference/config.md match their schemas; the codegen tests | yes | `mk/codegen.mk` |
 | `check-docs` | internal links and anchors of every tracked *.md resolve, every public document is indexed | yes | `mk/docs.mk` |
 | `check-hygiene` | task ids on marker keywords, unique glossary terms, no private references or process tags, module READMEs | yes | `mk/hygiene.mk` |
 | `check-imports` | dependencies point inward: the pure plugin core imports no adapter, framework or I/O | yes | `mk/imports.mk` |
+| `check-kotlin-gate-config` | the Kotlin gates keep the ENGINEERING.md limits (thresholds, planted fixtures on the boundaries, `check` wired to all six gate tasks); static, no JDK | yes | `mk/android.mk` |
 | `check-ledger` | docs/dependencies.md lists exactly the direct requirements at their pins; gitleaks = secret-scan.sh | yes | `mk/ledger.mk` |
 | `check-make-docs` | make-target reference fresh, every target described, gate table and docs name real targets | yes | `mk/make-docs.mk` |
 | `check-size` | file and function length limits (tools/quality/check_size.py with its baseline) | yes | `mk/quality.mk` |
 | `check-spdx` | every tracked source file carries the SPDX licence header | yes | `mk/spdx.mk` |
+| `check-upstream-import` | the vendored G2 driver equals the pinned upstream files apart from the documented changes (offline; its tests plant one defect per case) | yes | `mk/upstream-sync.mk` |
 | `coverage-py` | plugin test coverage: core files >= 90 %, other plugin files >= 70 % or their ratchet entry | yes | `mk/coverage-py.mk` |
 | `help` | list the top-level targets and the `TEST_TARGETS` that `make test` runs | no | `Makefile` |
 | `lint-py` | ruff lint and format check (ruff.toml with its ratchet baseline) over hermes-plugin, protocol and tools | yes | `mk/lint-py.mk` |
 | `secret-scan` | pinned, checksum-verified gitleaks over the working tree and the history of HEAD | yes | `Makefile` |
 | `test` | the secret scan plus every target a fragment appends to `TEST_TARGETS` | — | `Makefile` |
+| `test-android` | full Android build, tests, lint and `check` with detekt, ktlint and their planted fixtures (needs a JDK and ANDROID_HOME; not in `make test`) | no | `mk/android.mk` |
+| `test-android-jvm` | Gradle tests of the pure Kotlin modules, no Android SDK (needs a JDK; not in `make test`) | no | `mk/android.mk` |
 | `test-hermes-down` | stop the test gateway and the mock LLM via their pid files | no | `mk/test-hermes.mk` |
 | `test-hermes-harness` | hermetic tests of the test-Hermes harness (fake hermes, temp dirs, no ports, no network) | yes | `mk/test-hermes.mk` |
 | `test-hermes-up` | start the isolated test Hermes: test home, mock LLM in the background, gateway in the foreground | no | `mk/test-hermes.mk` |

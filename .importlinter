@@ -31,22 +31,36 @@ source_modules =
     glasses.envelope_scan
     glasses.envelope_text
     glasses.hermes_merge
+    glasses.inbound
+    glasses.outbound
     glasses.signer_protocol
 forbidden_modules =
     # plugin adapters (listed before they exist, so a new adapter is covered when it is created)
     glasses.adapter
+    glasses.adapter_router
     glasses.admin
     glasses.admin_common
     glasses.admin_crl
     glasses.admin_devices
     glasses.admin_names
+    glasses.connections
     glasses.crl_check
+    glasses.edge_auth
+    glasses.edge_cert
+    glasses.edge_listener
     glasses.enroll
     glasses.gate
     glasses.hermes_env
     glasses.hermes_facts
+    glasses.outbox
     glasses.registry
+    glasses.registry_parse
+    glasses.registry_signer_file
+    glasses.revoked_ids
     glasses.server
+    glasses.server_auth
+    glasses.server_runner
+    glasses.server_session
     glasses.signer_client
     glasses.telegram
     # frameworks and Hermes packages (Hermes ships a top-level `tools` package; ours is not a package)

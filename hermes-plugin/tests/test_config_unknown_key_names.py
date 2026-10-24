@@ -21,7 +21,7 @@ from glasses import config as gcfg
 from glasses.config_core import is_key_like, key_name
 
 SECRET = "S3cr3tValue"
-BASE = {"host": "127.0.0.1", "port": 8765, "bridge_port": 8766}
+BASE = {"bridge_port": 8766}
 # Fake token shapes, built at run time so no token-shaped literal sits in the tree.
 FAKE_GHP = "ghp_" + "A1b2" * 9
 FAKE_SK = "sk-" + "Ab3d" * 12
@@ -62,8 +62,8 @@ def test_credential_looking_unknown_key_is_warned_with_a_placeholder(
         FAKE_SK,
         "a" * 500,
         "a" * 33,
-        "a\nerror: glasses.host: forged",
-        "a\rerror: glasses.host: forged",
+        "a\nerror: glasses.bridge_port: forged",
+        "a\rerror: glasses.bridge_port: forged",
         "colour\x1b[2J",
         "user.name",
         "1colour",
@@ -105,20 +105,20 @@ def test_non_string_key_is_shown_as_a_placeholder() -> None:
 
 
 def test_did_you_mean_names_only_the_known_key() -> None:
-    result = gcfg.check({**BASE, "port@x": 1})
-    assert result.warnings == [f"{placeholder('port@x')}: unknown key, ignored — did you mean port?"], result.warnings
+    result = gcfg.check({**BASE, "edge@x": 1})
+    assert result.warnings == [f"{placeholder('edge@x')}: unknown key, ignored — did you mean edge?"], result.warnings
 
 
 @pytest.mark.parametrize(
     ("key", "expected"),
     [
-        ("hots", "hots: unknown key, ignored — did you mean host?"),
+        ("edgx", "edgx: unknown key, ignored — did you mean edge?"),
         ("long-treshold", "long-treshold: unknown key, ignored — did you mean long_threshold?"),
-        ("Host", "Host: unknown key, ignored — did you mean host?"),
+        ("Edge", "Edge: unknown key, ignored — did you mean edge?"),
         ("BRIDGE-PORT", "BRIDGE-PORT: unknown key, ignored — did you mean bridge_port?"),
         ("clientcertheader", "clientcertheader: unknown key, ignored — did you mean client_cert_header?"),
         ("client_cert_encodnig", "client_cert_encodnig: unknown key, ignored — did you mean client_cert_encoding?"),
-        ("port2", "port2: unknown key, ignored — did you mean port?"),
+        ("edge2", "edge2: unknown key, ignored — did you mean edge?"),
     ],
 )
 def test_key_like_near_miss_is_named_with_a_hint(key: str, expected: str) -> None:
@@ -148,7 +148,7 @@ def test_every_schema_key_is_key_like() -> None:
 
 def test_gateway_log_never_names_a_credential_looking_key(caplog: pytest.LogCaptureFixture) -> None:
     url_key, nested_key = f"https://u:{SECRET}@h", f"u:{SECRET}@h"
-    extra = {**BASE, url_key: 1, "signer": {"user": "", nested_key: 2}, "colour": 3, FAKE_GHP: 4, "hots": 5}
+    extra = {**BASE, url_key: 1, "signer": {"user": "", nested_key: 2}, "colour": 3, FAKE_GHP: 4, "edgx": 5}
     with caplog.at_level(logging.DEBUG):
         assert gcfg.validate_config({"extra": extra}) is True
     text = caplog.text
@@ -156,9 +156,9 @@ def test_gateway_log_never_names_a_credential_looking_key(caplog: pytest.LogCapt
     assert f"glasses.{placeholder(url_key)}: unknown key" in text, text
     assert f"glasses.signer.{placeholder(nested_key)}: unknown key" in text, text
     assert f"glasses.{placeholder('colour')}: unknown key, ignored" in text, text
-    assert "glasses.hots: unknown key, ignored — did you mean host?" in text, text
+    assert "glasses.edgx: unknown key, ignored — did you mean edge?" in text, text
 
 
 def test_unknown_key_name_with_a_line_break_cannot_forge_an_output_line() -> None:
-    warnings = gcfg.check({**BASE, "a\nerror: glasses.host: forged": 1}).warnings
+    warnings = gcfg.check({**BASE, "a\nerror: glasses.bridge_port: forged": 1}).warnings
     assert all("\n" not in warning for warning in warnings), warnings

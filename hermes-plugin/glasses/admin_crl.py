@@ -12,9 +12,10 @@ published CRL on the edge.
 rollback record is ``$state_dir/crl-seen.json``) and prints their errors and warnings, a summary line (``FAILED`` /
 ``WARN`` / ``OK``) and one fixed note that the edge copy is not read. Exit status: 0 = CRL published / check clean,
 1 = the signer call failed or was refused / the check found errors, 3 = the check found warnings only (so a scheduler
-that watches the exit status sees the 14-day and 180-day warnings), 2 = the config file is unreadable, a ``signer.*``
-key the command needs is not set or a module is missing. Only ``crl --check`` imports ``crl_check`` (and so
-``cryptography``), inside the command.
+that watches the exit status sees the 14-day and 180-day warnings), 2 = the config file is unreadable, a
+``--config``/``--hermes-home``/``$HERMES_HOME`` that is a URL (``://``, refused before any path is made, value not
+shown), a ``signer.*`` key the command needs is not set or a module is missing. Only ``crl --check`` imports
+``crl_check`` (and so ``cryptography``), inside the command.
 """
 
 from __future__ import annotations
@@ -33,6 +34,7 @@ from .admin_common import (
     ConfigFileError,
     ConfigHasErrors,
     glasses_config,
+    local_paths,
     missing_cryptography,
 )
 from .config import DependencyMissing, GlassesConfig, resolve_state_dir
@@ -100,7 +102,7 @@ def crl(args: argparse.Namespace, env: Mapping[str, str], out: TextIO) -> int:
     if args.check and module is None:
         return EXIT_UNREADABLE
     try:
-        cfg, home = glasses_config(args, env)
+        cfg, home = glasses_config(local_paths(args, env), env)
     except (ConfigFileError, DependencyMissing) as exc:
         print(f"error: {exc}", file=out)
         return EXIT_UNREADABLE
@@ -116,6 +118,6 @@ def register(commands: Any) -> None:
     """Add ``crl`` to the ``glasses-admin`` subcommands (*commands* from ``add_subparsers``)."""
     cmd = commands.add_parser("crl", help="ask the signer to generate and publish the device CRL")
     cmd.add_argument("--check", action="store_true", help="check the CA and CRL bundles the signer publishes")
-    cmd.add_argument("--config", type=Path, help="Hermes config.yaml (default: $HERMES_HOME/config.yaml)")
-    cmd.add_argument("--hermes-home", type=Path, help="Hermes home (default: $HERMES_HOME, else ~/.hermes)")
+    cmd.add_argument("--config", help="Hermes config.yaml (default: $HERMES_HOME/config.yaml)")
+    cmd.add_argument("--hermes-home", help="Hermes home (default: $HERMES_HOME, else ~/.hermes)")
     cmd.set_defaults(run=crl)

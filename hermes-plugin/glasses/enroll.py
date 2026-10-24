@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The ``/enroll`` relay: the plugin's half of device enrolment (brief section 7.2). It checks the HTTP request and
+"""The ``/enroll`` relay: the plugin's half of device enrolment (signer protocol). It checks the HTTP request and
 forwards ``{spki, code, sig}`` to the device-CA signer's ``enrol`` op; the window, the one-time code, the proof of
-possession, issuance, the token and the audit line are the signer's. No route is registered here: the protocol
-server (planned, T1.07) mounts ``/enroll`` for every method (``add_route("*", "/enroll", relay.handle)``) so the peer
+possession, issuance, the token and the audit line are the signer's. No route is registered here: the protocol server
+(``server.py``, T1.07c) mounts ``/enroll`` for every method (``add_route("*", "/enroll", relay.handle)``) so the peer
 check precedes the 405; a POST-only route would answer other methods with the router's 405 before ``handle`` runs.
 
-Order inside ``handle``, each refusal before any signer call: a peer ``peer_allowed`` refuses -> 404 (default
-``is_loopback_peer``: the transport's peer address only; client-cert and forwarded headers are never read); not POST
+Order inside ``handle``, each refusal before any signer call: a peer ``peer_allowed`` refuses -> 404 (a required
+argument: the server passes the edge-peer check of ``edge_auth``, the ``SO_PEERCRED`` uid of the connection; no
+client-cert or forwarded header decides it); not POST
 -> 405; ``RateLimiter`` (global, 6 a minute by default) -> 429; ``Content-Type`` not ``application/json`` -> 400;
 ``Content-Length`` or the body read so far over ``BODY_CAP`` -> 413; not one strict JSON object (UTF-8, no duplicate
 key, no NaN/Infinity) holding exactly the string keys ``spki``, ``code``, ``signature`` -> 400; ``MAX_IN_FLIGHT``
@@ -14,7 +15,7 @@ relays already running -> 429; after ``close()`` -> 503. Then ``SignerClient.enr
 own ``MAX_IN_FLIGHT``-worker executor, never the loop's shared default one (its own 340 s deadline is the only one).
 A relay holds its slot until that thread ends, even when the request goes away; a request cancelled while its thread
 is still queued for the executor frees its slot at once and the call is never made. ``close()`` shuts the executor
-down without waiting (the protocol server, planned T1.07, registers it in the app's ``on_cleanup``).
+down without waiting (the protocol server, ``server.py`` T1.07c, registers it in the app's ``on_cleanup``).
 The request and its answers, as the phone sees them: ``protocol/README.md``, section "HTTP ``/enroll``".
 
 Answers: success -> 200 JSON ``{cert, token, deviceId}`` with ``Cache-Control: no-store``; ``enrol_refused`` -> the
@@ -28,7 +29,6 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
-import ipaddress
 import json
 import logging
 import threading
@@ -52,18 +52,6 @@ Fields = tuple[str, str, str]
 Outcome = EnrolResult | Exception
 
 
-def is_loopback_peer(request: web.BaseRequest) -> bool:
-    """True only when the transport's peer is a loopback IP address (no transport, a unix socket or junk: False)."""
-    transport = request.transport
-    peer = transport.get_extra_info("peername") if transport is not None else None
-    if not isinstance(peer, tuple) or not peer or not isinstance(peer[0], str):
-        return False
-    try:
-        return ipaddress.ip_address(peer[0]).is_loopback
-    except ValueError:
-        return False
-
-
 class RateLimiter:
     """At most *per_minute* ``allow()`` answers True in any sliding 60 s window (one global budget)."""
 
@@ -82,13 +70,14 @@ class RateLimiter:
 
 
 class EnrollRelay:
-    """The ``/enroll`` handler; *client_factory* builds the signer client per request (e.g. ``client_from_config``)."""
+    """The ``/enroll`` handler; *client_factory* builds the signer client per request (e.g. ``client_from_config``);
+    *peer_allowed* (required, no default) decides which peers may use it."""
 
     def __init__(
         self,
         client_factory: Callable[[], SignerClient],
         *,
-        peer_allowed: Callable[[web.BaseRequest], bool] = is_loopback_peer,
+        peer_allowed: Callable[[web.BaseRequest], bool],
         limiter: RateLimiter | None = None,
     ) -> None:
         self._client_factory, self._peer_allowed = client_factory, peer_allowed

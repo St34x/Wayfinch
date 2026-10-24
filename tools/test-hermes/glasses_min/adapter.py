@@ -199,7 +199,7 @@ class GlassesAdapter(BasePlatformAdapter):
             await ws.send_str(json.dumps({"type": "ack", "clarify_resolved": ok}))
         elif kind == "slash_confirm":
             # NB: base.py docstring names GatewayRunner._resolve_slash_confirm, which does not exist at
-            # a4648c5f58; the real resolver is tools.slash_confirm.resolve(session_key, confirm_id, choice).
+            # d923a5eb48; the real resolver is tools.slash_confirm.resolve(session_key, confirm_id, choice).
             from tools import slash_confirm as _sc
 
             res = await _sc.resolve(frame["session_key"], frame["confirm_id"], frame["choice"])

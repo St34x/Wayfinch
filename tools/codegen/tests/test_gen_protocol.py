@@ -70,7 +70,8 @@ def test_every_type_has_exactly_one_body_definition() -> None:
 
 def test_seq_rules_and_directions_follow_schema_and_readme() -> None:
     frames = {frame.type_name: frame for frame in build_model(SCHEMA, README).frames}
-    assert (frames["welcome"].seq, frames["welcome"].direction) == ("required", "S→D")
+    assert (frames["welcome"].seq, frames["welcome"].direction) == ("absent", "S→D")  # outside the numbering (T1.09a)
+    assert (frames["msg.out"].seq, frames["msg.out"].direction) == ("required", "S→D")
     assert (frames["hello"].seq, frames["hello"].direction) == ("absent", "D→S")
     assert (frames["ping"].seq, frames["ping"].direction) == ("absent", "both")
     assert (frames["error"].seq, frames["error"].direction) == ("optional", "both")
@@ -81,8 +82,16 @@ def test_committed_module_is_fresh() -> None:
 
 
 def test_generator_owns_every_committed_file_of_the_directory() -> None:
-    committed = {p.name: p.read_text(encoding="utf-8") for p in (ROOT / gen_protocol.OUTPUT_DIR).glob("*.py")}
+    committed = {
+        p.name: p.read_text(encoding="utf-8") for p in (ROOT / gen_protocol.OUTPUT_DIR).glob("*") if p.is_file()
+    }
     assert gen_protocol.generate_dir(ROOT) == committed
+
+
+def test_the_schema_ships_inside_the_package_byte_for_byte() -> None:
+    """The installed plugin has no ``protocol/`` beside it: the codec loads this copy (T1.184b)."""
+    shipped = (ROOT / gen_protocol.OUTPUT_DIR / "envelope.schema.json").read_bytes()
+    assert shipped == (ROOT / gen_protocol.SCHEMA).read_bytes()
 
 
 def test_header_carries_spdx_and_generated_marker() -> None:
@@ -98,7 +107,8 @@ def test_generated_module_imports_and_matches_schema() -> None:
     assert {"welcome", "ping", "error"} <= module.SERVER_TO_DEVICE
     assert "welcome" not in module.DEVICE_TO_SERVER and "hello" not in module.SERVER_TO_DEVICE
     assert module.MsgOutBody.__optional_keys__ == frozenset({"notice", "longRef"})
-    assert "seq" in module.WelcomeFrame.__required_keys__ and "seq" in module.ErrorFrame.__optional_keys__
+    assert "seq" not in module.WelcomeFrame.__annotations__ and "seq" in module.MsgOutFrame.__required_keys__
+    assert "seq" in module.ErrorFrame.__optional_keys__
     assert "seq" not in module.HelloFrame.__annotations__
 
 
@@ -110,7 +120,7 @@ from protocol_types import Frame, HelloBody
 def describe(frame: Frame) -> str:
     if frame["type"] == "hello":
         return frame["body"]["appVersion"]
-    if frame["type"] == "welcome":
+    if frame["type"] == "msg.out":
         return str(frame["seq"])
     return frame["type"]
 
@@ -122,6 +132,8 @@ from protocol_types import Frame, MsgInBody
 
 def seq_of(frame: Frame) -> int:
     if frame["type"] == "hello":
+        return frame["seq"]
+    if frame["type"] == "welcome":
         return frame["seq"]
     return 0
 
@@ -152,6 +164,7 @@ def test_mypy_rejects_seq_on_a_device_frame_and_a_bad_literal(tmp_path: Path) ->
     output, status = _mypy(tmp_path, BAD_USE)
     assert status == 1
     assert 'TypedDict "HelloFrame" has no key "seq"' in output
+    assert 'TypedDict "WelcomeFrame" has no key "seq"' in output
     assert "\"Literal['shout']\"" in output and "origin" in output
 
 
@@ -230,6 +243,10 @@ def _drop_body_block(name: str) -> Mutation:
             lambda s: _blocks(s)[0]["if"]["properties"]["type"]["enum"].append("hello"),
             "type 'hello' both requires and forbids seq",
         ),
+        (
+            lambda s: _blocks(s)[1]["if"]["properties"]["type"]["enum"].remove("welcome"),
+            "type 'welcome' is S→D in protocol/README.md but seq is optional",
+        ),
     ],
 )
 def test_dispatch_errors(mutate: Mutation, expected: str) -> None:
@@ -241,6 +258,8 @@ def test_readme_row_missing_or_direction_contradicting_seq_fails() -> None:
     assert "missing ['ack']" in _error(lambda s: None, no_row)
     wrong = README.replace("| `hello` | D→S |", "| `hello` | S→D |")
     assert "type 'hello' is S→D in protocol/README.md but seq is absent" in _error(lambda s: None, wrong)
+    unnumbered = README.replace("| `welcome` | S→D |", "| `welcome` | D→S |")
+    assert "type 'welcome' is D→S in protocol/README.md but seq is absent" in _error(lambda s: None, unnumbered)
     twice = README.replace("| `ack` | D→S |", "| `ack` | D→S |\n| `ack` | D→S |")
     assert "type 'ack' has two rows" in _error(lambda s: None, twice)
 
@@ -264,7 +283,8 @@ def test_cli_writes_module_and_a_schema_edit_changes_it(tmp_path: Path) -> None:
     assert "    note: NotRequired[str]\n" in written
     assert written != COMMITTED.read_text(encoding="utf-8")
     names = sorted(path.name for path in (root / gen_protocol.OUTPUT_DIR).iterdir())
-    assert names == ["__init__.py", "protocol_types.py"]
+    assert names == ["__init__.py", "envelope.schema.json", "protocol_types.py"]
+    assert (root / gen_protocol.OUTPUT_DIR / "envelope.schema.json").read_text(encoding="utf-8") == json.dumps(schema)
 
 
 def test_cli_reports_schema_error_with_path(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:

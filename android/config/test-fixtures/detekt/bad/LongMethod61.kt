@@ -1,0 +1,64 @@
+// SPDX-License-Identifier: Apache-2.0
+// expect: LongMethod
+
+fun longMethod(input: Int): Int {
+    var total = input
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    total += 1
+    return total
+}

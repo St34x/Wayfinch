@@ -8,7 +8,7 @@
 # Spec documents are the only length overrides; <doc> §<n> is the tracked public rule allowing them
 # (ENGINEERING.md §1), and each override is one line with its reason.
 # Every directory directly under hermes-plugin/ and tools/ (except tests/) must appear here.
-# Android modules are added by the task that creates them.
+# Android modules are documented in android/README.md (part-of lines); a module that grows its own README gets its own line.
 
 hermes-plugin/glasses
 mk
@@ -18,3 +18,20 @@ tools/codegen
 tools/mock-llm
 tools/quality
 tools/test-hermes | part-of: tools
+tools/upstream-sync | part-of: tools
+android
+android/modules | part-of: android
+android/app | part-of: android
+android/audio | part-of: android
+android/confirm | part-of: android
+android/core | part-of: android
+android/glasses | part-of: android
+android/hermeslink | part-of: android
+android/hud | part-of: android
+android/input | part-of: android
+android/module-api | part-of: android
+android/protocol | part-of: android
+android/shell | part-of: android
+android/skills | part-of: android
+android/status | part-of: android
+android/ui-tokens | part-of: android

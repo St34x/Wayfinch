@@ -108,6 +108,55 @@ def test_cli_planted_todo_with_id_passes(repo: Path) -> None:
     assert _run(repo).returncode == 0
 
 
+VENDORED_G2 = "android/third_party/g2-driver/src/main/kotlin/app/hudcompanion/g2driver/sgcs/G2.kt"
+UPSTREAM_LINES = "".join(f"    // {KW_TODO}: {text}\n" for text in ("Implement", "Implement via dev_settings"))
+
+
+def test_cli_vendored_upstream_marker_lines_are_exempt_in_that_file_only(repo: Path) -> None:
+    _commit(repo, "T1.1: vendor", {VENDORED_G2: UPSTREAM_LINES})
+    assert _run(repo).returncode == 0
+    _commit(repo, "T1.1: other file", {"android/third_party/g2-driver/src/G2Host.kt": UPSTREAM_LINES})
+    done = _run(repo)
+    assert done.returncode == 1
+    assert "android/third_party/g2-driver/src/G2Host.kt:1:" in done.stderr
+    assert "android/third_party/g2-driver/src/G2Host.kt:2:" in done.stderr
+
+
+def test_cli_vendored_file_still_catches_a_new_bare_marker(repo: Path) -> None:
+    _commit(repo, "T1.1: vendor", {VENDORED_G2: UPSTREAM_LINES + f"    // {KW_TODO}: new note\n"})
+    done = _run(repo)
+    assert done.returncode == 1
+    assert f"{VENDORED_G2}:3:" in done.stderr
+    assert f"{VENDORED_G2}:1:" not in done.stderr
+
+
+def test_cli_vendored_dir_other_files_follow_the_task_id_rule(repo: Path) -> None:
+    _commit(repo, "T1.1: add", {"android/third_party/d/V.kt": f"// {KW_TODO} note\n"})
+    done = _run(repo)
+    assert done.returncode == 1
+    assert "android/third_party/d/V.kt:1:" in done.stderr
+    _commit(repo, "T1.1: fix", {"android/third_party/d/V.kt": f"// {KW_TODO}(T1.1): note\n"})
+    assert _run(repo).returncode == 0
+
+
+def test_cli_vendored_dir_keeps_the_private_reference_rule(repo: Path) -> None:
+    _commit(repo, "T1.1: vendor", {"android/third_party/d/V.kt": "// see .team/notes.md\n"})
+    done = _run(repo)
+    assert done.returncode == 1
+    assert "android/third_party/d/V.kt:1:" in done.stderr
+    assert "private reference" in done.stderr
+    _commit(repo, "T1.1: upstream file", {VENDORED_G2: "// see .team/notes.md\n"})
+    assert f"{VENDORED_G2}:1:" in _run(repo).stderr
+
+
+def test_real_vendored_marker_lines_are_the_marker_lines_of_the_tracked_file() -> None:
+    for name, allowed in hy.VENDORED_MARKER_LINES.items():
+        lines = {line.strip() for line in (TOP / name).read_text(encoding="utf-8").splitlines()}
+        assert allowed <= lines, f"{name}: stale entries {sorted(allowed - lines)}"
+        bare = {line for line in lines if KW_TODO in line and "(" + "T" not in line}
+        assert bare == allowed, f"{name}: bare marker lines not in VENDORED_MARKER_LINES: {sorted(bare - allowed)}"
+
+
 def test_cli_skips_untracked_team_and_binary(repo: Path) -> None:
     (repo / "untracked.py").write_text(f"# {KW_TODO} fix\n", encoding="utf-8")
     _commit(repo, "T1.1: plant", {".team/n.md": f"<!-- {KW_TODO} -->\n"})

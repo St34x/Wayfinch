@@ -58,11 +58,13 @@ def setter(key, value):
 
 
 PLANTED = [
-    ("host", "0.0.0.0", "glasses.host:"),
-    ("host", "localhost", "glasses.host:"),
-    ("host", "::ffff:127.0.0.1", "glasses.host:"),
-    ("port", "8765", "glasses.port:"),
-    ("bridge_port", 8765, "glasses.bridge_port:"),
+    ("edge", {"socket": "run/edge.sock"}, "glasses.edge.socket:"),
+    ("edge", {"socket": "/run/../edge.sock"}, "glasses.edge.socket:"),
+    ("edge", {"socket": f"https://u:{SECRET}@h/edge.sock"}, "glasses.edge.socket:"),
+    ("edge", {"socket": "/" + "a" * 107}, "glasses.edge.socket:"),
+    ("edge", {"user": "root"}, "glasses.edge.user:"),
+    ("edge", {"user": "Edge"}, "glasses.edge.user:"),
+    ("bridge_port", "8766", "glasses.bridge_port:"),
     ("public_url", f"wss://admin:{SECRET}@glasses.example.com/ws", "glasses.public_url:"),
     ("public_url", f"wss://glasses.example.com/ws?token={SECRET}", "glasses.public_url:"),
     ("public_url", f"https://glasses.example.com/{SECRET}", "glasses.public_url:"),
@@ -99,8 +101,9 @@ def test_real_cli_one_precise_message_no_secret(tmp_path, key, value, prefix):
     [
         ("long_threshold", 1),
         ("long_threshold", 512),
-        ("host", "::1"),
-        ("host", "127.0.0.2"),
+        ("bridge_port", 1),
+        ("bridge_port", 65535),
+        ("edge", {"socket": "/" + "a" * 106, "user": "edge-proxy"}),
         ("public_url", "wss://Glasses.Example.com:443/ws"),
     ],
 )
@@ -200,9 +203,9 @@ def test_readme_contract_test_fails_on_a_mutated_readme(tmp_path, monkeypatch):
 # -- gateway-level keys, --hermes-home, the example config ---------------------------------------
 
 
-def test_platform_level_host_and_allow_from_are_refused_like_the_gateway(tmp_path):
+def test_platform_level_bridge_port_and_allow_from_are_refused_like_the_gateway(tmp_path):
     def mutate(_extra, data):
-        data["gateway"]["platforms"]["glasses"].update(host="0.0.0.0", allow_from=["*"])
+        data["gateway"]["platforms"]["glasses"].update(bridge_port=0, allow_from=["*"])
 
     code, out, _ = cli(write(tmp_path, mutate), tmp_path)
     assert code == admin.EXIT_ERRORS, out

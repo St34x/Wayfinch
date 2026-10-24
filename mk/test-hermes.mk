@@ -25,6 +25,7 @@ TEST_TARGETS += test-hermes-harness
 #: test-hermes-harness — hermetic tests of the test-Hermes harness (fake hermes, temp dirs, no ports, no network)
 test-hermes-harness:
 	PY=$(PY) sh tools/test-hermes/test_harness.sh
+	sh tools/test-hermes/test_swap_pin.sh
 
 #: test-hermes-up — start the isolated test Hermes: test home, mock LLM in the background, gateway in the foreground
 test-hermes-up:

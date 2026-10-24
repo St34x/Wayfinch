@@ -4,10 +4,11 @@
 ``violation(frame, from_device=...)`` names the first rule a frame breaks, or returns ``None``
 (protocol/README.md, *Delivery* and *Limits and validation notes*):
 
-* ``seq`` by direction: never on a D→S frame (``error`` included); required on the S→D-only types and forbidden on
-  ``ping``/``pong`` and the D→S-only types when the server sends; optional only on an S→D ``error``. The schema
-  cannot see the direction: it requires ``seq`` on the S→D-only types, so a D→S frame of such a type fails either here
-  or at the schema.
+* ``seq`` by direction: never on a D→S frame (``error`` included); required on the S→D-only types except ``welcome``
+  and forbidden on ``welcome``, ``ping``/``pong`` and the D→S-only types when the server sends; optional only on an
+  S→D ``error``. The schema cannot see the direction: it requires ``seq`` on the S→D-only types (``welcome`` excepted),
+  so a D→S frame of such a type fails either here or at the schema; a ``welcome`` from the device has no ``seq`` to
+  fail on, so this rule refuses it (``UNNUMBERED_S2D``).
 * nesting depth of the open objects ``skill.call.args``, ``skill.result.output`` and each ``skill.manifest.skills[]``
   item: the named value is level 1, each nested object or array adds 1, scalars add none; above 32 is refused. This
   count is authoritative; the raw-text pre-scan of ``glasses.envelope_scan`` only bounds the parser's recursion.
@@ -54,6 +55,7 @@ S2D_ONLY: Final = frozenset({
     "meeting.hint",
 })
 BOTH_WAYS: Final = frozenset({"ping", "pong", "error"})
+UNNUMBERED_S2D: Final = frozenset({"welcome"})  # S→D-only, but outside the outbox numbering: never carries ``seq``
 D2S_ONLY: Final = frozenset(FRAME_TYPES) - S2D_ONLY - BOTH_WAYS
 
 MAX_FIELD_DEPTH: Final = 32
@@ -109,8 +111,8 @@ def violation(frame: Mapping[str, object], *, from_device: bool) -> Violation | 
 def _seq_allowed(frame: Mapping[str, object], frame_type: str, from_device: bool) -> bool:
     has_seq = "seq" in frame
     if from_device:
-        return not has_seq
-    if frame_type in S2D_ONLY:
+        return not has_seq and frame_type not in UNNUMBERED_S2D
+    if frame_type in S2D_ONLY - UNNUMBERED_S2D:
         return has_seq
     return frame_type == "error" or not has_seq
 

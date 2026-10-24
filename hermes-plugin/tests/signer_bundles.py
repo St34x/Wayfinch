@@ -68,7 +68,7 @@ def place(public_dir: Path, cas: list[Ca], crls: list[bytes]) -> None:
     ):
         path = public_dir / file
         path.write_bytes(data)
-        os.chmod(path, 0o640)  # the published mode (brief section 12)
+        os.chmod(path, 0o640)  # the signer's published mode
 
 
 @dataclass(frozen=True)

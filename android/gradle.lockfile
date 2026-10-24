@@ -1,0 +1,9 @@
+# This is a Gradle generated file for dependency locking.
+# Manual edits can break the build and are not advised.
+# This file is expected to be part of source control.
+# To regenerate this file, run: ./gradlew :dependencies --write-locks
+com.pinterest.ktlint:ktlint-cli:1.8.0=ktlintCli
+io.gitlab.arturbosch.detekt:detekt-cli:1.23.8=detektCli
+org.jetbrains.kotlin:kotlin-stdlib:2.2.10=detektTypes
+org.jetbrains:annotations:13.0=detektTypes
+empty=

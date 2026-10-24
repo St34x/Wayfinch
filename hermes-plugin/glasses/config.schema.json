@@ -3,47 +3,64 @@
   "$id": "urn:wayfinch:plugin:glasses:config:v1",
   "$comment": "SPDX-License-Identifier: Apache-2.0",
   "title": "glasses platform settings",
-  "description": "Settings of the glasses platform plugin under gateway.platforms.glasses.extra in the Hermes config. glasses/config.py validates with this schema (types, ranges, patterns) plus the rules a schema cannot express (loopback host, public_url normal form, absolute paths, port != bridge_port, home_lane in lanes). Keys the Hermes gateway itself injects are not ours and are skipped; access-control keys Hermes would act on are refused; any other unknown key is a warning. An unknown key that is a near-miss of a key at the same level (at most max(2, 20 % of that key's length) edits after lower-casing and reading '-' as '_') gets a 'did you mean <key>?' hint, and its name is shown only then and only when it looks like a key name (1-32 characters, an ASCII letter first, then letters, '_' and '-', at most 2 digits); any other name is shown as <an unknown key of N characters> (it could be a pasted secret or forge an output line). x-error / x-errors / x-hint are the user-facing messages ('glasses.<path>: <x-error> (got <value>) — <x-hint>'); a string value is shown only when x-echo is true and it contains neither '@' nor '://' (it could carry credentials); URL- and credential-capable keys (public_url, meeting.endpoint, meeting.provider, meeting.llm.*) are never echoed. x-status: planned marks a key whose feature is not built yet: it is accepted and validated but has no effect.",
+  "description": "Settings of the glasses platform plugin under gateway.platforms.glasses.extra in the Hermes config. glasses/config.py validates with this schema (types, ranges, patterns) plus the rules a schema cannot express (public_url normal form, absolute paths, the 107-byte socket limit, home_lane in lanes). Keys the Hermes gateway itself injects are not ours and are skipped; access-control keys Hermes would act on are refused; any other unknown key is a warning. An unknown key that is a near-miss of a key at the same level (at most max(2, 20 % of that key's length) edits after lower-casing and reading '-' as '_') gets a 'did you mean <key>?' hint, and its name is shown only then and only when it looks like a key name (1-32 characters, an ASCII letter first, then letters, '_' and '-', at most 2 digits); any other name is shown as <an unknown key of N characters> (it could be a pasted secret or forge an output line). x-error / x-errors / x-hint are the user-facing messages ('glasses.<path>: <x-error> (got <value>) — <x-hint>'); a string value is shown only when x-echo is true and it contains neither '@' nor '://' (it could carry credentials); URL- and credential-capable keys (public_url, meeting.endpoint, meeting.provider, meeting.llm.*) are never echoed. x-status: planned marks a key whose feature is not built yet: it is accepted and validated but has no effect.",
   "type": "object",
   "additionalProperties": false,
   "x-error": "must be a mapping",
   "x-hint": "gateway.platforms.glasses.extra holds the settings as key: value pairs",
   "properties": {
-    "host": {
-      "description": "Bind address of the plugin's WebSocket listener: a loopback IP literal only; hostnames, localhost included, are refused. A TLS edge in front of it serves the public side.",
-      "x-status": "planned",
-      "type": "string",
-      "maxLength": 45,
-      "default": "127.0.0.1",
-      "x-error": "must be a loopback IP literal (127.0.0.1 or ::1)",
-      "x-hint": "the plugin never binds a public or wildcard address; put a TLS edge in front of it",
-      "x-echo": true
-    },
-    "port": {
-      "description": "Loopback WebSocket port the TLS edge proxies /ws to.",
-      "x-status": "planned",
-      "type": "integer",
-      "minimum": 1,
-      "maximum": 65535,
-      "default": 8765,
-      "x-error": "must be an integer 1-65535",
-      "x-hint": "the loopback port your TLS edge proxies /ws to, e.g. 8765"
+    "edge": {
+      "description": "The hop from the TLS edge to the plugin: the plugin serves /ws and /enroll only on a unix socket, never on TCP. The edge proxy connects to edge.socket; only a peer running as the system user edge.user is admitted.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "socket": {
+          "description": "Absolute path of the plugin's unix socket, at most 107 bytes UTF-8 (the AF_UNIX limit, not characters), without a .. component; empty = unset (the listener then refuses to start; there is no TCP fallback).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 107,
+          "default": "",
+          "x-error": "must be an absolute path of at most 107 bytes (UTF-8) without a .. component, surrounding whitespace or control characters, or empty",
+          "x-hint": "e.g. /run/hermes-glasses/edge.sock",
+          "x-echo": true
+        },
+        "user": {
+          "description": "System user the TLS edge runs as: the only peer uid the plugin admits on the socket; not root; empty = unset.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^([a-z_][a-z0-9_-]{0,31})?$",
+          "default": "",
+          "x-error": "must be a user name other than root (lower-case letters, digits, _ and -, at most 32 characters), or empty",
+          "x-hint": "e.g. edge-proxy",
+          "x-echo": true
+        }
+      },
+      "default": {
+        "socket": "",
+        "user": ""
+      },
+      "x-error": "must be a mapping with the keys socket, user",
+      "x-hint": "e.g. edge: {socket: /run/hermes-glasses/edge.sock, user: edge-proxy}"
     },
     "bridge_port": {
-      "description": "Loopback port of the phone bridge; must differ from port.",
+      "description": "Loopback port of the phone bridge (MCP server), bound on 127.0.0.1.",
       "x-status": "planned",
       "type": "integer",
       "minimum": 1,
       "maximum": 65535,
       "default": 8766,
       "x-error": "must be an integer 1-65535",
-      "x-errors": {
-        "x-differ": "must differ from port"
-      },
-      "x-hint": "a second free loopback port, e.g. 8766"
+      "x-hint": "a free loopback port, e.g. 8766"
     },
     "state_dir": {
-      "description": "Absolute directory for the plugin state; empty or null = $HERMES_HOME/glasses. Used today by glasses-admin crl --check (its rollback record crl-seen.json, the highest CRL number seen per CA), config check --live and glasses-admin revoke (it connects to the plugin's admin socket admin.sock here; the server is planned); the plugin keeps no CA key and no CRL here; the device registry and outbox (planned) will live here too.",
+      "description": "Absolute directory for the plugin state; empty or null = $HERMES_HOME/glasses. Used today by glasses-admin crl --check (its rollback record crl-seen.json, the highest CRL number seen per CA), config check --live and glasses-admin revoke (it connects to the plugin's admin socket admin.sock here; the server is planned); the plugin keeps no CA key and no CRL here; the plugin's outbox is outbox.sqlite here (mode 0600): it holds the text of each answer until the phone acks it; there is no timer: rows older than 24 h are deleted at the next answer, reconnect or plugin start, a revoked device's rows (purged) at the next answer, its next refused connect or plugin start, and over 500 rows per device the oldest are evicted; the device registry (planned) will live here too. The directory must be owned by the plugin user with mode 0700, the only supported mode: last-seen, the deny overlay and crl --check refuse anything else; the outbox alone tolerates a readable 0755 one but refuses a group- or world-writable one, and then the start fails (retryable).",
       "type": [
         "string",
         "null"
@@ -64,8 +81,7 @@
       "x-hint": "the wss://<host>/<path> URL of your TLS edge, without user:password@"
     },
     "lanes": {
-      "description": "Global lane allowlist (plus per-device lanes); [] = per-device lanes only. At most 32 (= protocol welcome.lanes maxItems).",
-      "x-status": "planned",
+      "description": "Global lane allowlist: the lane of an inbound message (msg.in) must be in it and in the device's registry lanes, else the device gets error lane_forbidden; [] = the device's lanes only. At most 32 (= protocol welcome.lanes maxItems).",
       "type": "array",
       "maxItems": 32,
       "uniqueItems": true,
@@ -84,8 +100,7 @@
       "x-echo": true
     },
     "home_lane": {
-      "description": "Lane of the home channel (glasses:<lane>); empty = no home channel. Must be one of lanes when lanes is not empty.",
-      "x-status": "planned",
+      "description": "Lane of an inbound message (msg.in) that names no lane; also the lane of the home channel (glasses:<lane>, planned). Empty = such a message is refused (lane_forbidden). Must be one of lanes when lanes is not empty.",
       "type": "string",
       "maxLength": 40,
       "pattern": "^(?:(?:glasses:)?[a-z][a-z0-9_-]{0,31})?$",
@@ -101,8 +116,7 @@
       "x-echo": true
     },
     "client_cert_header": {
-      "description": "HTTP header the TLS edge forwards the client certificate in.",
-      "x-status": "planned",
+      "description": "HTTP header the TLS edge forwards the client certificate in; the plugin verifies that certificate against the signer's device-ca.pem and never reads a forwarded fingerprint.",
       "type": "string",
       "pattern": "^[A-Za-z0-9-]{1,64}$",
       "not": {
@@ -115,7 +129,6 @@
     },
     "client_cert_encoding": {
       "description": "pem-urlescaped (nginx $ssl_client_escaped_cert) or der-base64 (Caddy).",
-      "x-status": "planned",
       "enum": [
         "pem-urlescaped",
         "der-base64"
@@ -199,7 +212,7 @@
           "x-echo": true
         },
         "public_dir": {
-          "description": "Absolute directory where the signer publishes device-ca.pem, devices-crl.pem and devices.json; glasses-admin crl --check reads the first two; empty = unset.",
+          "description": "Absolute directory where the signer publishes device-ca.pem, devices-crl.pem and devices.json; glasses-admin crl --check reads the first two; empty = unset. Set up so that the directory and every parent are owned by root or the signer user and not writable by the plugin user, and devices.json is owned by the signer user with mode 0640 or stricter. The plugin itself refuses a directory that is a symlink, owned by the plugin user or writable by group or others, and a devices.json that is missing, a symlink, owned by anyone but the signer user, wider than 0640, oversize or corrupt (it does not check the parents). In each of those cases no new device connection is accepted; cutting sessions that are already live is the watcher of T1.63a (not built yet).",
           "type": [
             "string",
             "null"

@@ -8,13 +8,13 @@ import json
 import logging
 import os
 import stat
-import threading
 from datetime import UTC, datetime
 
 import pytest
 
 from glasses import config as gcfg
 from glasses import registry as reg
+from glasses import registry_parse as rp
 
 FP_A = "ab" * 32
 FP_B = "cd" * 32
@@ -44,14 +44,14 @@ def _file_text(state_dir) -> str:
     return (state_dir / reg.FILE_NAME).read_text()
 
 
-# -- add / verify / list ---------------------------------------------------------------------
+# -- add / lookup / list ---------------------------------------------------------------------
 
 
 def test_add_then_verify_and_list(registry):
     device, token = registry.add("Phone", FP_A, ["assistant", "work"])
     assert len(token) >= 43  # 256 random bits, url-safe base64
-    assert registry.verify(token, FP_A) == device
-    assert registry.verify(token, FP_A.upper()) == device
+    assert registry.lookup(token, FP_A)[0] == device
+    assert registry.lookup(token, FP_A.upper())[0] == device
     assert device.lanes == ("assistant", "work")
     assert device.created_at == "2026-10-05T12:00:00Z"
     assert device.revoked_at is None and device.last_seen is None
@@ -71,8 +71,8 @@ def test_two_devices_get_distinct_ids_and_tokens(registry):
     a, tok_a = registry.add("A", FP_A, [])
     b, tok_b = registry.add("B", FP_B, [])
     assert a.device_id != b.device_id and tok_a != tok_b
-    assert registry.verify(tok_a, FP_B) is None  # token of A with the cert of B
-    assert registry.verify(tok_b, FP_B) == b
+    assert registry.lookup(tok_a, FP_B)[0] is None  # token of A with the cert of B
+    assert registry.lookup(tok_b, FP_B)[0] == b
 
 
 @pytest.mark.parametrize(
@@ -94,16 +94,16 @@ def test_two_devices_get_distinct_ids_and_tokens(registry):
 def test_verify_negatives(registry, token, fp):
     _, real = registry.add("Phone", FP_A, [])
     token = real if token == "TOKEN" else token
-    assert registry.verify(token, fp) is None
+    assert registry.lookup(token, fp)[0] is None
 
 
 def test_verify_unknown_on_empty_registry(registry, state_dir):
-    assert registry.verify("anything", FP_A) is None
+    assert registry.lookup("anything", FP_A)[0] is None
     assert registry.list() == []
     assert not state_dir.exists()  # reads never create anything
 
 
-def test_verify_compares_every_entry_without_early_return(registry, monkeypatch):
+def test_lookup_compares_every_entry_without_early_return(registry, monkeypatch):
     fps = (FP_A, FP_B, FP_C)
     issued = [registry.add(f"Phone {i}", fp, []) for i, fp in enumerate(fps)]
     seen: list[tuple[str, str]] = []
@@ -114,7 +114,7 @@ def test_verify_compares_every_entry_without_early_return(registry, monkeypatch)
 
     monkeypatch.setattr(reg.hmac, "compare_digest", spy)
     first, token = issued[0]
-    assert registry.verify(token, FP_A) == first  # matches the FIRST entry: the loop must still run on
+    assert registry.lookup(token, FP_A)[0] == first  # matches the FIRST entry: the loop must still run on
     assert len(seen) == 2 * len(fps)  # token + fingerprint for every entry
     assert {a for a, _ in seen} >= set(fps)
     assert (_sha(token), _sha(token)) in seen
@@ -123,8 +123,8 @@ def test_verify_compares_every_entry_without_early_return(registry, monkeypatch)
     registry.revoke(first.device_id)
     monkeypatch.setattr(reg.hmac, "compare_digest", spy)
     seen.clear()
-    assert registry.verify(token, FP_A) is None  # revoked entries are compared too, not skipped
-    assert len(seen) == 2 * len(fps)
+    assert registry.lookup(token, FP_A)[0] is None  # revoked entries are compared too, not skipped
+    assert len(seen) == 2 * len(fps) + 1  # and the tombstone check of the one revoked entry
     assert {a for a, _ in seen} >= set(fps)
 
 
@@ -135,19 +135,40 @@ def test_revoke_kills_token_and_keeps_fingerprint_tombstone(registry, state_dir)
     device, token = registry.add("Phone", FP_A, ["work"])
     revoked = registry.revoke(device.device_id)
     assert revoked.revoked_at == "2026-10-05T12:00:00Z"
-    assert registry.verify(token, FP_A) is None
-    assert registry.revoked_fingerprint(FP_A) is True
-    assert registry.revoked_fingerprint(FP_A.upper()) is True
+    assert registry.lookup(token, FP_A)[0] is None
+    assert registry.lookup("x" * 43, FP_A)[1] is True
+    assert registry.lookup("x" * 43, FP_A.upper())[1] is True
     entry = json.loads(_file_text(state_dir))["devices"][0]
     assert entry["tokenSha256"] is None and entry["certFingerprint"] == FP_A
     assert _sha(token) not in _file_text(state_dir)
     assert registry.list() == [revoked]
 
 
-def test_revoked_fingerprint_false_for_active_unknown_and_garbage(registry):
+def test_lookup_reports_no_tombstone_for_active_unknown_and_garbage(registry):
     registry.add("Phone", FP_A, [])
     for fp in (FP_A, FP_B, "nope", None):
-        assert registry.revoked_fingerprint(fp) is False
+        assert registry.lookup("x" * 43, fp)[1] is False
+
+
+def test_lookup_answers_the_device_and_the_tombstone_in_one_read_for_every_kind_of_credential(registry):
+    active, token = registry.add("Phone", FP_A, ["work"])
+    gone, gone_token = registry.add("Old", FP_B, [])
+    registry.revoke(gone.device_id)
+    cases = [
+        (token, FP_A, (active, False)),  # the active device
+        (token, FP_A.upper(), (active, False)),
+        (token, FP_B, (None, True)),  # its token with another device's (tombstoned) fingerprint
+        ("x" * 43, FP_A, (None, False)),  # wrong token
+        (gone_token, FP_B, (None, True)),  # a revoked device's old token
+        (token, FP_C, (None, False)),  # unknown fingerprint
+        (None, FP_A, (None, False)),
+        (token, None, (None, False)),
+        ("", "nope", (None, False)),
+    ]
+    for tok, fp, want in cases:
+        assert registry.lookup(tok, fp) == want, (tok, fp)
+    assert registry.lookup(token, FP_A) == (active, False)
+    assert registry.lookup("x" * 43, FP_B) == (None, True)
 
 
 def test_revoke_is_idempotent_and_keeps_first_time(state_dir):
@@ -176,7 +197,7 @@ def test_fingerprint_never_enrolled_twice(registry):
 
 
 def test_lanes_bound_comes_from_config(registry):
-    assert reg.MAX_LANES is gcfg.MAX_LANES
+    assert rp.MAX_LANES is gcfg.MAX_LANES
     lanes = [f"l{i}" for i in range(gcfg.MAX_LANES)]
     registry.add("Max", FP_A, lanes)
     with pytest.raises(reg.InvalidDeviceError):
@@ -216,178 +237,6 @@ def test_bad_fingerprints_refused(registry, fp):
         registry.add("Phone", fp, [])
 
 
-# -- file safety -----------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "content",
-    [
-        b"not json",
-        b"[]",
-        b'{"version": 2, "devices": []}',
-        b'{"version": 1}',
-        b'{"version": 1, "devices": [1]}',
-        b'{"version": 1, "devices": [{"deviceId": "x"}]}',
-        b"\xff\xfe",
-    ],
-)
-def test_corrupt_file_fails_closed(registry, state_dir, content):
-    state_dir.mkdir(mode=0o700)
-    path = state_dir / reg.FILE_NAME
-    path.write_bytes(content)
-    path.chmod(0o600)
-    for call in (registry.list, lambda: registry.verify("t", FP_A), lambda: registry.add("P", FP_A, [])):
-        with pytest.raises(reg.RegistryCorruptError):
-            call()
-    assert path.read_bytes() == content
-
-
-def test_entry_with_active_status_but_no_hash_is_corrupt(registry, state_dir):
-    device, _ = registry.add("Phone", FP_A, [])
-    path = state_dir / reg.FILE_NAME
-    data = json.loads(path.read_text())
-    data["devices"][0]["tokenSha256"] = None
-    path.write_text(json.dumps(data))
-    with pytest.raises(reg.RegistryCorruptError):
-        registry.list()
-
-
-@pytest.mark.parametrize(
-    "key, value",
-    [
-        ("lanes", ["../x"]),
-        ("lanes", ["Work\r"]),
-        ("lanes", ["work", "work"]),
-        ("lanes", "work"),
-        ("lanes", [f"l{i}" for i in range(gcfg.MAX_LANES + 1)]),
-        ("lanes", [True]),
-        ("name", "\u202eevil"),
-        ("name", "a\x00b"),
-        ("name", ""),
-        ("name", " Phone"),
-        ("name", "x" * 65),
-        ("name", 7),
-        ("version", True),
-        ("version", 1.0),
-    ],
-)
-def test_on_disk_entry_breaking_add_rules_is_corrupt(registry, state_dir, key, value):
-    _, token = registry.add("Phone", FP_A, ["work"])
-    path = state_dir / reg.FILE_NAME
-    data = json.loads(path.read_text())
-    (data if key == "version" else data["devices"][0])[key] = value
-    path.write_text(json.dumps(data))
-    for call in (registry.list, lambda: registry.verify(token, FP_A), lambda: registry.add("P", FP_B, [])):
-        with pytest.raises(reg.RegistryCorruptError) as info:
-            call()
-        assert token not in str(info.value) and _sha(token) not in str(info.value)
-
-
-@pytest.mark.parametrize("target, mode", [("file", 0o640), ("file", 0o604), ("dir", 0o750), ("dir", 0o701)])
-def test_loose_permissions_refused(registry, state_dir, target, mode):
-    _, token = registry.add("Phone", FP_A, [])
-    (state_dir / reg.FILE_NAME if target == "file" else state_dir).chmod(mode)
-    with pytest.raises(reg.RegistryPermissionError):
-        registry.verify(token, FP_A)
-    with pytest.raises(reg.RegistryPermissionError):
-        registry.add("Other", FP_B, [])
-
-
-def test_symlinked_file_refused(registry, state_dir, tmp_path):
-    registry.add("Phone", FP_A, [])
-    real = tmp_path / "elsewhere.json"
-    (state_dir / reg.FILE_NAME).rename(real)
-    (state_dir / reg.FILE_NAME).symlink_to(real)
-    with pytest.raises(reg.RegistryPermissionError):
-        registry.list()
-
-
-@pytest.mark.parametrize("breakage", ["symlink", "mode"])
-def test_unsafe_lock_file_refused(registry, state_dir, tmp_path, breakage):
-    registry.add("Phone", FP_A, [])
-    lock = state_dir / reg.LOCK_NAME
-    if breakage == "symlink":
-        lock.unlink()
-        lock.symlink_to(tmp_path / "elsewhere.lock")
-    else:
-        lock.chmod(0o644)
-    with pytest.raises(reg.RegistryPermissionError):
-        registry.add("Other", FP_B, [])
-    assert len(registry.list()) == 1
-
-
-def test_stale_temp_from_a_crash_is_swept(registry, state_dir):
-    registry.add("Phone", FP_A, [])
-    stale = state_dir / f".{reg.FILE_NAME}.crash.tmp"
-    stale.write_text("{}")
-    registry.add("Other", FP_B, [])
-    assert sorted(os.listdir(state_dir)) == [reg.FILE_NAME, reg.LOCK_NAME]
-
-
-def test_dir_fsync_failure_after_rename_keeps_the_token(registry, monkeypatch, caplog):
-    def boom(_path):
-        raise OSError("io")
-
-    monkeypatch.setattr(reg, "_fsync_dir", boom)
-    device, token = registry.add("Phone", FP_A, [])
-    assert registry.verify(token, FP_A) == device
-    assert "fsync failed (OSError)" in caplog.text and token not in caplog.text
-
-
-def test_missing_parent_dir_is_an_error(tmp_path):
-    registry = reg.Registry(tmp_path / "no" / "such", clock=lambda: NOW)
-    with pytest.raises(reg.RegistryError):
-        registry.add("Phone", FP_A, [])
-
-
-@pytest.mark.parametrize("failing", ["replace", "fsync"])
-def test_failed_write_leaves_old_file_and_no_temp(registry, state_dir, monkeypatch, failing):
-    registry.add("Phone", FP_A, [])
-    before = sorted(os.listdir(state_dir))
-    old = _file_text(state_dir)
-
-    def boom(*_args):
-        raise OSError("disk full")
-
-    monkeypatch.setattr(reg.os, failing, boom)
-    with pytest.raises(OSError):
-        registry.add("Other", FP_B, [])
-    monkeypatch.undo()
-    assert sorted(os.listdir(state_dir)) == before
-    assert _file_text(state_dir) == old
-
-
-def test_write_fsyncs_file_and_directory(registry, monkeypatch):
-    kinds: list[bool] = []
-    real_fsync = os.fsync
-
-    def spy(fd):
-        kinds.append(stat.S_ISDIR(os.fstat(fd).st_mode))
-        real_fsync(fd)
-
-    monkeypatch.setattr(reg.os, "fsync", spy)
-    registry.add("Phone", FP_A, [])
-    assert kinds == [False, True]
-
-
-def test_concurrent_adds_from_two_registry_objects(state_dir):
-    regs = [reg.Registry(state_dir, clock=lambda: NOW) for _ in range(2)]
-    issued: list[tuple[str, str]] = []
-
-    def worker(i: int) -> None:
-        fp = f"{i:064x}"
-        _, token = regs[i % 2].add(f"Phone {i}", fp, [])
-        issued.append((token, fp))
-
-    threads = [threading.Thread(target=worker, args=(i,)) for i in range(12)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-    assert len(regs[0].list()) == 12
-    assert all(regs[1].verify(token, fp) is not None for token, fp in issued)
-
-
 # -- no secrets in logs or errors ------------------------------------------------------------
 
 
@@ -395,8 +244,8 @@ def test_no_token_or_hash_in_logs_errors_or_repr(registry, state_dir, caplog):
     caplog.set_level(logging.DEBUG)
     device, token = registry.add("Phone", FP_A, ["work"])
     secrets_ = (token, _sha(token))
-    registry.verify(token, FP_A)
-    registry.verify(token, FP_B)
+    registry.lookup(token, FP_A)[0]
+    registry.lookup(token, FP_B)[0]
     errors = []
     for call in (
         lambda: registry.add("Again", FP_A, []),
@@ -409,7 +258,7 @@ def test_no_token_or_hash_in_logs_errors_or_repr(registry, state_dir, caplog):
         errors.append(info.value)
     (state_dir / reg.FILE_NAME).chmod(0o644)
     with pytest.raises(reg.RegistryPermissionError) as info:
-        registry.verify(token, FP_A)
+        registry.lookup(token, FP_A)[0]
     errors.append(info.value)
     (state_dir / reg.FILE_NAME).chmod(0o600)
     registry.revoke(device.device_id)

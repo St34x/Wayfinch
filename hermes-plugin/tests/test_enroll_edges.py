@@ -17,12 +17,25 @@ import enroll_helpers
 import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
-from enroll_helpers import BODY, CODE, JSON, SIG, SPKI, app_with, mocked, post, relay_for, send, status_of
+from enroll_helpers import (
+    BODY,
+    CODE,
+    JSON,
+    SIG,
+    SPKI,
+    app_with,
+    is_loopback_peer,
+    mocked,
+    post,
+    relay_for,
+    send,
+    status_of,
+)
 from fake_signer import Script
 
 from glasses import enroll as enroll_module
 from glasses import signer_client
-from glasses.enroll import BODY_CAP, MAX_IN_FLIGHT, EnrollRelay, RateLimiter, is_loopback_peer
+from glasses.enroll import BODY_CAP, MAX_IN_FLIGHT, EnrollRelay, RateLimiter
 
 ESCAPED = json.dumps(BODY).replace('"spki"', '"\\u0073pki"')  # the key written as a JSON escape
 
@@ -219,7 +232,7 @@ def test_an_unexpected_client_error_is_a_503_naming_only_its_type_and_frees_its_
     def broken() -> object:
         raise RuntimeError("boom " + CODE)
 
-    relay = EnrollRelay(broken, limiter=RateLimiter(per_minute=1000))  # type: ignore[arg-type]
+    relay = EnrollRelay(broken, peer_allowed=is_loopback_peer, limiter=RateLimiter(per_minute=1000))  # type: ignore[arg-type]
     with caplog.at_level(logging.DEBUG):
         replies = [post(relay) for _ in range(MAX_IN_FLIGHT + 1)]
     assert [r.status for r in replies] == [503] * (MAX_IN_FLIGHT + 1)
@@ -238,7 +251,7 @@ def test_the_outcome_of_a_failed_call_carries_no_traceback(monkeypatch, error):
 
     seen: list[object] = []
     monkeypatch.setattr(enroll_module, "_answer", lambda outcome: seen.append(outcome) or web.Response(status=503))
-    assert post(EnrollRelay(failing, limiter=RateLimiter(per_minute=1000))).status == 503  # type: ignore[arg-type]
+    assert post(EnrollRelay(failing, peer_allowed=is_loopback_peer, limiter=RateLimiter(per_minute=1000))).status == 503  # type: ignore[arg-type]
     assert seen == [error]
     assert error.__traceback__ is None
 
@@ -293,7 +306,9 @@ def test_a_request_cancelled_before_its_thread_starts_frees_its_slot(fake):
 def test_a_worker_whose_request_already_freed_the_slot_makes_no_call():
     claim = threading.Lock()
     claim.acquire()  # the cancelled request claimed it first
-    relay = EnrollRelay(lambda: pytest.fail("no signer call"), limiter=RateLimiter(per_minute=1000))
+    relay = EnrollRelay(
+        lambda: pytest.fail("no signer call"), peer_allowed=is_loopback_peer, limiter=RateLimiter(per_minute=1000)
+    )
     loop = mock.Mock()
     with pytest.raises(asyncio.CancelledError):
         relay._enrol(loop, (SPKI, CODE, SIG), claim)
@@ -307,7 +322,7 @@ def test_a_base_exception_from_the_signer_call_is_not_swallowed_and_the_slot_is_
     def interrupted() -> object:
         raise error()
 
-    relay = EnrollRelay(interrupted, limiter=RateLimiter(per_minute=1000))  # type: ignore[arg-type]
+    relay = EnrollRelay(interrupted, peer_allowed=is_loopback_peer, limiter=RateLimiter(per_minute=1000))  # type: ignore[arg-type]
     loop = mock.Mock()
     with pytest.raises(error):
         relay._enrol(loop, (SPKI, CODE, SIG), threading.Lock())

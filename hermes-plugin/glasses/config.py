@@ -8,11 +8,11 @@ see docs/dependencies.md -- Hermes itself ships it only with its ``mcp`` extra; 
 ``DependencyMissing`` naming the module: one log line in the gateway, exit 2 in ``config check``) and
 adds the rules a schema cannot express (``glasses.config_values``):
 
-* ``host`` is a loopback IP literal (hostnames, ``localhost`` included, are refused);
 * ``public_url`` is empty or a strict ``wss://`` URL, stored in normal form;
-* ``state_dir``, ``signer.socket`` and ``signer.public_dir`` are absolute paths without
-  surrounding whitespace or control characters (or empty);
-* ``bridge_port`` differs from ``port``; ``home_lane`` is one of ``lanes`` unless ``lanes`` is ``[]``.
+* ``state_dir``, ``signer.socket``, ``signer.public_dir`` and ``edge.socket`` are absolute paths without
+  surrounding whitespace or control characters (or empty); ``edge.socket`` has no ``..`` component, and the two
+  sockets fit an ``AF_UNIX`` address (at most 107 bytes in UTF-8); ``edge.user`` is never ``root``;
+* ``home_lane`` is one of ``lanes`` unless ``lanes`` is ``[]``.
 
 Every problem is reported, one message per path: ``<path>: <problem> (got <value>) — <hint>``; callers
 print it as ``glasses.<message>``. A string value is shown only for keys the schema marks ``x-echo``
@@ -72,7 +72,6 @@ from .config_core import may_hold_credentials as may_hold_credentials
 from .config_core import message as message
 from .config_core import path_str
 from .config_values import build, prune, semantic_errors
-from .config_values import is_loopback_host as is_loopback_host
 from .config_values import normalise_public_url as normalise_public_url
 
 logger = logging.getLogger(__name__)
@@ -83,9 +82,9 @@ SCHEMA_PATH = Path(__file__).with_name("config.schema.json")
 # stub) must see every reply whole, so the gateway must not split it first. At the pinned Hermes the gateway splits by
 #   * the adapter class attribute ``MAX_MESSAGE_LENGTH`` (default 4096) for streamed replies
 #     (gateway/stream_consumer_fallback.py:211-222, 378-395 via
-#     gateway/platforms/base.py:2042-2046) and tool-progress bubbles (gateway/run_turn_runner.py:549-561);
+#     gateway/platforms/base.py:2038-2042) and tool-progress bubbles (gateway/run_turn_runner.py:549-561);
 #   * ``PlatformEntry.max_message_length`` (0 = no split) in the send_message tool
-#     (tools/send_message_tool.py:603-618, 703-704);
+#     (tools/send_message_tool.py:605-620, 705-706);
 #   * a 4000-char truncation of cron output unless the adapter sets ``splits_long_messages``
 #     (gateway/delivery.py:235-258).
 # The adapter sets ``splits_long_messages = True`` and both caps to MAX_MESSAGE_LENGTH: the reply size
@@ -128,7 +127,7 @@ class _Validator(Protocol):
 
 
 def _strict_integer(_checker: object, value: object) -> bool:
-    return isinstance(value, int) and not isinstance(value, bool)  # 8765.0 is not a port
+    return isinstance(value, int) and not isinstance(value, bool)  # 8766.0 is not a port
 
 
 @functools.lru_cache(maxsize=1)

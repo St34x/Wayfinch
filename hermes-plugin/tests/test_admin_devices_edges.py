@@ -30,7 +30,7 @@ FAST = Timeouts(connect_s=1.0, op_s=0.5, enrol_s=1.0)
 DEV = "0123456789abcdef"
 NOT_BY_PLUGIN = (
     "error: revoke: revoked by the signer, new connections are refused; "
-    "an open session stays until the plugin's live cut or a gateway restart\n"
+    "a running plugin closes an open session within about a second (its stat poll of the signer's file)\n"
 )
 
 
@@ -87,7 +87,9 @@ def test_an_unreadable_config_exits_2_and_neither_leg_runs(tmp_path, fake, plugi
 
 def test_a_config_with_errors_exits_1_and_neither_leg_runs(tmp_path, fake, plugin, monkeypatch):
     patch_signer(monkeypatch, fake.socket_path)
-    config = write_config(tmp_path, plugin.state_dir, extra="        max_sessions: not-a-number\n        port: -5\n")
+    config = write_config(
+        tmp_path, plugin.state_dir, extra="        max_sessions: not-a-number\n        bridge_port: -5\n"
+    )
     code, out = main(["revoke", DEV, "--config", str(config)])
     assert (code, out) == (
         1,

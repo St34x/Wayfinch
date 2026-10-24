@@ -16,7 +16,7 @@ import time
 import enroll_helpers
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
-from enroll_helpers import BODY, app_with, factory, mocked, post, relay_for, send, status_of
+from enroll_helpers import BODY, app_with, factory, is_loopback_peer, mocked, post, relay_for, send, status_of
 from fake_signer import Script
 
 from glasses.enroll import MAX_IN_FLIGHT, EnrollRelay, RateLimiter
@@ -67,7 +67,7 @@ def test_sequential_requests_never_start_more_than_the_pool_size_of_workers(fake
         seen.update(t.name for t in enroll_threads())
         return inner()
 
-    relay = EnrollRelay(recording, limiter=RateLimiter(per_minute=1000))
+    relay = EnrollRelay(recording, peer_allowed=is_loopback_peer, limiter=RateLimiter(per_minute=1000))
     for _ in range(12):
         assert post(relay).status == 200
     assert 1 <= len(seen) <= MAX_IN_FLIGHT and all(name.startswith(PREFIX) for name in seen)
@@ -76,7 +76,10 @@ def test_sequential_requests_never_start_more_than_the_pool_size_of_workers(fake
 
 def test_a_relay_that_never_served_a_request_has_no_thread_and_closes_cleanly():
     before = len(enroll_threads())
-    relays = [EnrollRelay(lambda: pytest.fail("no signer call"), limiter=RateLimiter()) for _ in range(20)]  # type: ignore[arg-type,return-value]
+    relays = [
+        EnrollRelay(lambda: pytest.fail("no signer call"), peer_allowed=is_loopback_peer, limiter=RateLimiter())
+        for _ in range(20)
+    ]  # type: ignore[arg-type,return-value]
     assert len(enroll_threads()) == before
     for relay in relays:
         relay.close()
@@ -251,7 +254,7 @@ class Slow:
 @pytest.mark.parametrize("seed", [11, 12])
 def test_a_cancel_storm_with_a_close_in_the_middle_ends_with_no_slot_and_no_thread(seed):
     rng = random.Random(seed)  # noqa: S311 - a reproducible schedule
-    relay = EnrollRelay(lambda: Slow(rng), limiter=RateLimiter(per_minute=10**6))  # type: ignore[arg-type,return-value]
+    relay = EnrollRelay(lambda: Slow(rng), peer_allowed=is_loopback_peer, limiter=RateLimiter(per_minute=10**6))  # type: ignore[arg-type,return-value]
     body = json.dumps(BODY).encode()
 
     async def main() -> list[object]:

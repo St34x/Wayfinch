@@ -193,7 +193,7 @@ def test_a_bad_id_sends_nothing_when_the_signer_would_say_unknown_device(tmp_pat
 def test_a_bad_id_beats_a_config_with_errors_and_a_missing_config(tmp_path, fake, plugin, monkeypatch):
     client = SignerClient(fake.socket_path, os.geteuid(), timeouts=FAST)
     monkeypatch.setattr(signer_client, "client_from_config", lambda _cfg: client)
-    broken = write_config(tmp_path, plugin.state_dir, extra="        port: -5\n")
+    broken = write_config(tmp_path, plugin.state_dir, extra="        bridge_port: -5\n")
     for config in (broken, tmp_path / "missing.yaml"):
         out = io.StringIO()
         code = admin.main(["revoke", "nope", "--config", str(config)], env={}, out=out)
@@ -213,10 +213,10 @@ CONFIG_ERROR_LINES = (
 @pytest.mark.parametrize(
     "extra",
     [
-        "        port: -5\n",
-        f"        max_sessions: {MARKER}\n        port: -5\n",
-        f"        port: {MARKER}\n",
-        f"        port: {MARKER}\n        max_sessions: -1\n",
+        "        bridge_port: -5\n",
+        f"        max_sessions: {MARKER}\n        bridge_port: -5\n",
+        f"        bridge_port: {MARKER}\n",
+        f"        bridge_port: {MARKER}\n        max_sessions: -1\n",
     ],
     ids=["one-error", "two-errors", "marker-as-port", "marker-and-negative-sessions"],
 )
@@ -237,7 +237,7 @@ def test_a_config_with_errors_prints_the_two_fixed_lines_and_leaks_nothing(tmp_p
 def test_a_config_with_errors_exits_1_and_prints_exactly_two_lines(tmp_path, fake, plugin, monkeypatch):
     client = SignerClient(fake.socket_path, os.geteuid(), timeouts=FAST)
     monkeypatch.setattr(signer_client, "client_from_config", lambda _cfg: client)
-    config = write_config(tmp_path, plugin.state_dir, extra="        port: -5\n")
+    config = write_config(tmp_path, plugin.state_dir, extra="        bridge_port: -5\n")
     out = io.StringIO()
     assert admin.main(["revoke", DEV, "--config", str(config)], env={}, out=out) == 1
     assert out.getvalue() == CONFIG_ERROR_LINES

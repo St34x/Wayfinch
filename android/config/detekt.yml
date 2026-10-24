@@ -1,0 +1,54 @@
+# SPDX-License-Identifier: Apache-2.0
+# detekt 1.23.8 rules, applied on top of detekt's defaults (--build-upon-default-config). Hard limits of
+# ENGINEERING.md section 2: a detekt threshold reports at "value >= threshold", so each is the limit plus one.
+# Every override has the fixture that proves its boundary in config/test-fixtures/detekt/ (`./gradlew detektFixtures`).
+# Suppress with @Suppress("RuleId") // reason on the same line: sourceRules (build.gradle.kts) rejects the common forms
+# without one; known gaps in ENGINEERING.md section 2, tracked in T1.282.
+# Generated Kotlin (the directory in generatedDirs, `// @generated` in the leading comment header) is not analysed, see
+# isGenerated in build.gradle.kts. `!!` and @Suppress without a reason are rejected by text (sourceRules there).
+complexity:
+  CyclomaticComplexMethod:
+    active: true
+    threshold: 11 # complexity 10 passes, 11 fails
+  LongMethod:
+    active: true
+    threshold: 61 # 60 lines of code pass, 61 fail
+  LongParameterList:
+    active: true
+    functionThreshold: 5 # 4 parameters pass, 5 fail
+    constructorThreshold: 5
+    ignoreDataClasses: true # data-class constructors are exempt (ENGINEERING.md section 2)
+  NestedBlockDepth:
+    active: true
+    threshold: 4 # depth 3 passes, 4 fails
+
+potential-bugs:
+  UnsafeCallOnNullableType: # no `!!` (ENGINEERING.md section 5); needs type resolution, see detektTypes in build.gradle.kts
+    active: true
+  UnreachableCode: # off: type resolution cannot read the JDK 26 types, so code after `x ?: return` on one is
+    active: false # reported as unreachable (seen on the SAT tests); the compiler warns about the real cases
+
+empty-blocks:
+  EmptyFunctionBlock:
+    active: true
+    excludes: ['**/ModuleTest.kt'] # the placeholder test of each module, replaced by its first task
+
+exceptions:
+  TooGenericExceptionCaught: # catch the specific type and convert it (ENGINEERING.md section 7)
+    active: true
+
+coroutines:
+  GlobalCoroutineUsage: # coroutines live in a scope with an owner
+    active: true
+
+style:
+  UnusedPrivateMember: # no dead code (ENGINEERING.md section 3)
+    active: true
+  UnusedPrivateProperty:
+    active: true
+  MaxLineLength:
+    active: true
+    maxLineLength: 120 # as ktlint (.editorconfig)
+  ForbiddenImport: # SAT-PL-09: android.util.Log is banned until the app logger exists
+    active: true
+    imports: ['android.util.Log', 'android.util.Log.*'] # the class and its members only: android.util.Size etc. stay allowed (SourceRulesTest)

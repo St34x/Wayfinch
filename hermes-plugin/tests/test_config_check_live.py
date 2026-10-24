@@ -93,10 +93,21 @@ def test_explicit_state_dir_is_checked(home, tmp_path):
     assert str(state) in msg and "0750" in msg
 
 
-def test_ports_in_use(home):
-    errors = live(cfg(), home, probes(busy=(8765, 8766))).errors
-    assert [e.split(":", 1)[0] for e in errors] == ["glasses.port", "glasses.bridge_port"]
-    assert "127.0.0.1:8765 is in use" in errors[0]
+def test_bridge_port_in_use(home):
+    errors = live(cfg(), home, probes(busy=(8766,))).errors
+    assert [e.split(":", 1)[0] for e in errors] == ["glasses.bridge_port"]
+    assert "127.0.0.1:8766 is in use" in errors[0]
+
+
+def test_only_the_bridge_port_is_probed_and_on_loopback(home):
+    seen = []
+    fake = admin.Probes(
+        port_free=lambda host, port: seen.append((host, port)) or True,
+        resolves=lambda _host: True,
+        hermes=lambda _cfg: facts(),
+    )
+    assert live(cfg(), home, fake).errors == []
+    assert seen == [("127.0.0.1", 8766)]
 
 
 def test_real_port_probe():
@@ -200,8 +211,8 @@ def test_cli_live_wiring(home):
         })
     )
     out = io.StringIO()
-    code = admin.main(["config", "check", "--live", "--hermes-home", str(home)], {}, out, probes(busy=(8765,)))
-    assert code == admin.EXIT_ERRORS and "error: glasses.port: 127.0.0.1:8765 is in use" in out.getvalue()
+    code = admin.main(["config", "check", "--live", "--hermes-home", str(home)], {}, out, probes(busy=(8766,)))
+    assert code == admin.EXIT_ERRORS and "error: glasses.bridge_port: 127.0.0.1:8766 is in use" in out.getvalue()
     path.write_text(path.read_text().replace("- work", "- Work"))
     out = io.StringIO()
     assert admin.main(["config", "check", "--live", "--hermes-home", str(home)], {}, out, probes()) == 1
@@ -249,7 +260,6 @@ def scratch_home(root: Path) -> Path:
     home = root / "home"
     (root / "state").mkdir(mode=0o700)
     extra = {
-        "port": free_port(),
         "bridge_port": free_port(),
         "public_url": "wss://localhost/ws",
         "state_dir": str(root / "state"),
@@ -278,7 +288,7 @@ def scratch_home(root: Path) -> Path:
         {
             "stt": {"provider": "local", "language": "en"},
             "agent": {"clarify_timeout": 3600},
-            "approvals": {"timeout": "${T154_APPROVALS_TIMEOUT}"},  # canary: only Hermes' env expansion makes it 0
+            "approvals": {"timeout": 0},
             "platform_toolsets": {"glasses": ["web", "todo"], "telegram": ["web"]},
         },
     )
@@ -299,7 +309,6 @@ def test_live_against_real_hermes_in_a_scratch_home(mode):
             "PATH": "/usr/bin:/bin",
             "HOME": str(user_home),
             "PYTHONPATH": str(PLUGIN_ROOT),
-            "T154_APPROVALS_TIMEOUT": "0",
         }
         argv = ["config", "check", "--live"]
         if mode == "env":
@@ -314,7 +323,7 @@ def test_live_against_real_hermes_in_a_scratch_home(mode):
     assert proc.returncode == admin.EXIT_ERRORS, proc.stdout + proc.stderr[-2000:]
     expected = [
         "error: allow-all gate: profile work: GLASSES_ALLOW_ALL_USERS is set",
-        "error: glasses.lanes: lane 'ghost' is routed to profile 'ghost', which this gateway does not serve",
+        "error: glasses.lanes: lane 'ghost' is routed to profile <a profile name not shown",
         "error: profile work: approvals.timeout resolves to 0",
         "error: profile work: clarify timeout resolves to a positive number of seconds",
         'error: profile work: stt.language is "en" but meeting.language_hints has fr',

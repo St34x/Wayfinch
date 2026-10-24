@@ -4,10 +4,12 @@
 
 Output: hermes-plugin/glasses/generated/protocol_types.py - `FrameType` Literal, one TypedDict per body (optional keys
 `NotRequired`), one TypedDict per frame (`type` Literal + its body; `seq` required / absent / optional per the schema's
-seq rule) and the `Frame` union mypy narrows on `frame["type"]`, plus FRAME_TYPES and the direction sets
-DEVICE_TO_SERVER / SERVER_TO_DEVICE (from the protocol/README.md "Message types" table). The generator owns the whole
-directory: it writes every file in it (`__init__.py` too), and `make check-codegen` (tools/codegen/check_fresh.sh)
-regenerates the directory into a temporary one and fails on any extra, missing or different file (`diff -r`).
+`seq` rule) and the `Frame` union mypy narrows on `frame["type"]`, plus FRAME_TYPES and the direction sets
+DEVICE_TO_SERVER / SERVER_TO_DEVICE (from the protocol/README.md "Message types" table); and envelope.schema.json, a
+byte copy of the schema that the adapter loads (the plugin is installed by copying its package alone). The generator
+owns the whole directory: it writes every file in it (`__init__.py` too), and `make check-codegen`
+(tools/codegen/check_fresh.sh) regenerates the directory into a temporary one and fails on any extra, missing or
+different file (`diff -r`).
 
 Usage: gen_protocol.py [--root DIR] [--out-dir DIR]   (defaults: this repository, its generated directory)
 Exit:  0 written; 2 an input cannot be read, or the schema uses something the generator cannot represent (one line
@@ -37,6 +39,7 @@ SCHEMA = Path("protocol/envelope.schema.json")
 README = Path("protocol/README.md")
 OUTPUT_DIR = Path("hermes-plugin/glasses/generated")
 OUTPUT = OUTPUT_DIR / "protocol_types.py"
+SCHEMA_COPY = "envelope.schema.json"  # the schema itself, byte for byte: an installed plugin has no protocol/ beside it
 INIT = (
     "# SPDX-License-Identifier: Apache-2.0\n"
     '"""Code generated from the protocol schema by tools/codegen (never edited by hand; see protocol_types.py)."""\n'
@@ -126,20 +129,25 @@ def _read(path: Path) -> str:
         raise CodegenError(f"{path}: not UTF-8: {error.reason} at byte {error.start}") from None
 
 
-def generate(root: Path) -> str:
-    """Read the schema and README under `root` and return the module text (raises CodegenError)."""
+def load_model(root: Path) -> ProtocolModel:
+    """Read the schema and README under `root` into the language-neutral model (raises CodegenError)."""
     try:
         schema = json.loads(_read(root / SCHEMA))
     except json.JSONDecodeError as error:
         raise CodegenError(f"{SCHEMA}: invalid JSON: {error.msg} (line {error.lineno} column {error.colno})") from None
     if not isinstance(schema, dict):
         raise CodegenError(f"{SCHEMA}: the schema is not a JSON object")
-    return emit_python(build_model(schema, _read(root / README)))
+    return build_model(schema, _read(root / README))
+
+
+def generate(root: Path) -> str:
+    """Read the schema and README under `root` and return the module text (raises CodegenError)."""
+    return emit_python(load_model(root))
 
 
 def generate_dir(root: Path) -> dict[str, str]:
     """Every file of the generated directory: name -> text (raises CodegenError)."""
-    return {"__init__.py": INIT, OUTPUT.name: generate(root)}
+    return {"__init__.py": INIT, OUTPUT.name: generate(root), SCHEMA_COPY: _read(root / SCHEMA)}
 
 
 def _write(out_dir: Path, files: dict[str, str]) -> None:

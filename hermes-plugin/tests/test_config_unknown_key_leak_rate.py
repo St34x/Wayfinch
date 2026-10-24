@@ -36,8 +36,9 @@ ALPHABET = string.ascii_letters + string.digits
 TYPOS: tuple[tuple[str, str, str], ...] = tuple(
     (prefix, typo, key)
     for prefix, key, typos in (
-        ("", "host", "hots hsot hostt Host HOST hst"),
-        ("", "port", "prot por portt Port pport"),
+        ("", "edge", "edg egde Edge edges"),
+        ("edge.", "socket", "sokcet soket Socket sockets"),
+        ("edge.", "user", "uesr users User"),
         ("", "bridge_port", "bridgeport bridge-port brige_port bridge_prot Bridge_Port bridge_ports"),
         ("", "state_dir", "statedir state-dir state_dri stat_dir state_dirs"),
         ("", "public_url", "publicurl public-url public_ulr pubilc_url public_uri"),
@@ -149,7 +150,7 @@ def test_realistic_typos_keep_their_hint() -> None:
 
 
 def test_typo_warning_names_the_typo_and_the_key() -> None:
-    warnings = gcfg.check({"host": "127.0.0.1", "signer": {"uesr": "x"}, "meeting": {"llm": {"modle": "x"}}}).warnings
+    warnings = gcfg.check({"bridge_port": 9000, "signer": {"uesr": "x"}, "meeting": {"llm": {"modle": "x"}}}).warnings
     assert warnings == [
         "signer.uesr: unknown key, ignored — did you mean signer.user?",
         "meeting.llm.modle: unknown key, ignored — did you mean meeting.llm.model?",

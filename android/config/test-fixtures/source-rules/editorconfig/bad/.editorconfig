@@ -1,0 +1,4 @@
+# SPDX-License-Identifier: Apache-2.0
+# A nested .editorconfig that would switch ktlint off for its subtree: the build must reject it.
+[*.kt]
+ktlint_standard = disabled

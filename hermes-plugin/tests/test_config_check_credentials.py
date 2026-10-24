@@ -17,7 +17,7 @@ from test_config_check_edges import EXTRA, SECRET, check_file, plat
 @pytest.mark.parametrize(
     "data",
     [
-        plat(extra={**EXTRA, "host": f"u:{SECRET}@127.0.0.1"}),
+        plat(extra={**EXTRA, "edge": {"socket": f"u:{SECRET}@127.0.0.1"}}),
         plat(host=f"https://u:{SECRET}@127.0.0.1"),  # platform level
         {**plat(), "glasses": {"host": f"https://{SECRET}@x"}},  # root block
         {"platforms": {"glasses": {"enabled": True, "extra": {**EXTRA, "state_dir": f"/x/u:{SECRET}@h"}}}},
@@ -37,7 +37,7 @@ from test_config_check_edges import EXTRA, SECRET, check_file, plat
         plat(extra={**EXTRA, "lanes": [f"u:{SECRET}@h", f"u:{SECRET}@h"]}),
     ],
     ids=[
-        "extra.host",
+        "edge.socket",
         "platform-level host",
         "root host",
         "state_dir",

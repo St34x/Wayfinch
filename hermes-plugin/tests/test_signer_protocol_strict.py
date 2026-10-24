@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-"""The signer protocol where the brief is silent and the module docstring fixes the format: no whitespace around the
-answer object, full-length PEM body lines, ``registry_revoked`` only ``true`` on ``revoke``, a coherent window, at
-least one generated CRL; and requests that cannot be built outside the allowlist (direct ``Request`` construction,
-text subclasses, non-mapping fields), with read-only result schemas."""
+"""The signer protocol where the signer's own protocol is silent and the module docstring fixes the format: no
+whitespace around the answer object, full-length PEM body lines, ``registry_revoked`` only ``true`` on ``revoke``, a
+coherent window, at least one generated CRL; and requests that cannot be built outside the allowlist (direct
+``Request`` construction, text subclasses, non-mapping fields), with read-only result schemas."""
 
 from __future__ import annotations
 

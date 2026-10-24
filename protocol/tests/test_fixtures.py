@@ -8,6 +8,7 @@ with its direction and the rule it exercises.
 """
 
 import json
+import math
 from pathlib import Path
 
 import pytest
@@ -18,7 +19,7 @@ from test_schema_limits import _readme_byte_limits
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures"
 INDEX = json.loads((FIXTURES / "index.json").read_text(encoding="utf-8"))
-KINDS = ("valid", "invalid", "codec-valid", "codec-invalid")
+KINDS = ("valid", "invalid", "codec-valid", "codec-invalid", "raw-invalid")
 NEUTRAL_LANES = {"assistant", "work"}
 MAX_FIELD_DEPTH = 32  # README: depth counted from the named open value, which is level 1
 PRESCAN_MAX = 35  # README: the raw pre-scan allows 35 nested open brackets for any frame, rejects 36
@@ -37,6 +38,10 @@ def load(kind, name):
 
 def entries(kind):
     return [pytest.param(e, id=e["file"]) for e in INDEX[kind]]
+
+
+def raw_entries(defect):
+    return [pytest.param(e, id=e["file"]) for e in INDEX["raw-invalid"] if e["defect"] == defect]
 
 
 def _depth(node):
@@ -103,6 +108,53 @@ def test_valid_fixture_passes(validator, entry):
 def test_invalid_fixture_fails(validator, entry):
     assert entry["reason"]
     assert not validator.is_valid(load("invalid", entry["file"]))
+
+
+def _no_repeated_key(pairs):
+    if len({key for key, _ in pairs}) != len(pairs):
+        raise ValueError("repeated key")
+    return dict(pairs)
+
+
+@pytest.mark.parametrize("entry", entries("raw-invalid"))
+def test_raw_invalid_entries_name_their_defect(entry):
+    assert entry["defect"] in ("repeated-key", "not-json")
+    assert entry["dir"] == entry["file"][:3] and entry["rule"], entry
+    assert ("repair" in entry) == (entry["defect"] == "not-json"), entry["file"]
+
+
+def _strict_loads(text):
+    """An RFC 8259 reader: what a strict decoder accepts (no NaN/Infinity, no overflow, no repeated key)."""
+
+    def refuse(name):
+        raise ValueError(f"{name} is not JSON")
+
+    def finite(literal):
+        if not math.isfinite(value := float(literal)):
+            raise ValueError("number out of range")
+        return value
+
+    return json.loads(text, parse_constant=refuse, parse_float=finite, object_pairs_hook=_no_repeated_key)
+
+
+@pytest.mark.parametrize("entry", raw_entries("repeated-key"))
+def test_repeated_key_fixture_repeats_a_key_and_is_otherwise_schema_valid(validator, entry):
+    text = (FIXTURES / "raw-invalid" / entry["file"]).read_text(encoding="utf-8")
+    with pytest.raises(ValueError, match="repeated key"):
+        json.loads(text, object_pairs_hook=_no_repeated_key)
+    errs = [x.message for x in validator.iter_errors(json.loads(text))]  # the "last one wins" reading
+    assert not errs, (entry["file"], errs)
+
+
+@pytest.mark.parametrize("entry", raw_entries("not-json"))
+def test_not_json_fixture_is_not_json_and_its_repair_is_a_schema_valid_frame(validator, entry):
+    text = (FIXTURES / "raw-invalid" / entry["file"]).read_text(encoding="utf-8")
+    with pytest.raises(ValueError):
+        _strict_loads(text)
+    find, replace = entry["repair"]["find"], entry["repair"]["replace"]
+    assert text.count(find) == 1, entry["file"]
+    errs = [x.message for x in validator.iter_errors(_strict_loads(text.replace(find, replace)))]
+    assert not errs, (entry["file"], errs)
 
 
 @pytest.mark.parametrize("kind", ["codec-valid", "codec-invalid"])

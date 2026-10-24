@@ -58,7 +58,8 @@ def test_real_live_a_config_granting_every_sender_fails_the_check(patch):
     assert proc.returncode == admin.EXIT_ERRORS, proc.stdout + proc.stderr[-2000:]
     assert _gate_lines(proc.stdout) == [
         f"error: allow-all gate: active scope: {GATE} sender; set GLASSES_ALLOWED_USERS",
-        f"error: allow-all gate: profile default: {GATE} sender; set GLASSES_ALLOWED_USERS",
+        f"error: allow-all gate: profile default: {GATE} sender; set GLASSES_ALLOWED_USERS"
+        "; or remove the switch from that profile",
     ], proc.stdout
     assert "config check: FAILED (2 error(s), 0 warning(s))" in proc.stdout and proc.stderr == "", proc.stderr
 

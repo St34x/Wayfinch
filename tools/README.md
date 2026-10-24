@@ -10,15 +10,20 @@ Scripts that build, check and test the repository. Nothing here is installed or 
 
 - `secret-scan.sh` — pinned, checksum-verified gitleaks over the tree and history (`make secret-scan`).
 - `check-spdx.sh` — every tracked source file carries the SPDX header (`make check-spdx`).
+- `check-android-wrapper.sh` — the Gradle wrapper keeps its pinned URL and distribution SHA-256 (each key once) and the SHA-256 of its four files (`make check-android-wrapper`).
 - `quality/` — the quality gates (size, hygiene, module READMEs, lint, types, imports, coverage, docs links and index,
   dependency ledger); own README.
 - `codegen/` — generators: protocol types, the config reference and the make-target reference; own README.
 - `mock-llm/` — scripted OpenAI-compatible mock LLM for the test Hermes; own README.
-- `test-hermes/` — isolated test Hermes: `setup_home.sh`, `run_gateway.sh`, `stop_pidfile.sh`, a minimal plugin
-  `glasses_min/` and the hermetic `test_harness.sh` (`make test-hermes-up` / `-down` / `-harness`, see
+- `test-hermes/` — isolated test Hermes: `setup_home.sh`, `run_gateway.sh`, `stop_pidfile.sh`, `swap-pin.sh` (points the pinned
+  pair at another pin, with rollback), a minimal plugin `glasses_min/` and the hermetic `test_harness.sh` and
+  `test_swap_pin.sh` (`make test-hermes-up` / `-down` / `-harness`, see
   `mk/test-hermes.mk`; pinned clone and venv setup: `docs/test-hermes.md`).
+- `upstream-sync/` — checks for the vendored G2 driver: `verify-import.sh` proves the copied files equal the pinned
+  upstream blobs apart from the documented header lines and package rewrite; `make check-upstream-import` runs it
+  offline with its planted-defect tests (`upstream-sync/tests/`); provenance: `android/third_party/g2-driver/UPSTREAM.md`.
 - `tests/` — shell tests of the scripts above. `make test` runs `test_secret_scan.sh`, `test_secret_scan_edges.sh`,
-  `test_make_fragments_edges.sh`, `test_check_spdx.sh` and `test_venv_hashes.sh`. Run by hand from the repo root:
+  `test_make_fragments_edges.sh`, `test_check_spdx.sh`, `test_check_android_wrapper.sh`, `test_kotlin_gate_config.sh` and `test_venv_hashes.sh`. Run by hand from the repo root:
   - `tests/test_make_fragments.sh` — by hand (`sh tools/tests/test_make_fragments.sh`; runs the real `make test`).
   - `tests/test_check_spdx_edges.sh` — by hand (`sh tools/tests/test_check_spdx_edges.sh`).
   - `tests/test_secret_scan_dir_arg.sh` — by hand (`sh tools/tests/test_secret_scan_dir_arg.sh`; skips without the

@@ -104,7 +104,7 @@ def test_live_tool_names_are_filtered_too(tmp_path):
 
 # -- platform-level keys at every block location ----------------------------------------------------------
 
-BAD_LEVEL = {"host": "0.0.0.0", "allow_from": ["*"], "dm_policy": "open"}
+BAD_LEVEL = {"bridge_port": 0, "allow_from": ["*"], "dm_policy": "open"}
 
 
 @pytest.mark.parametrize(
@@ -119,11 +119,11 @@ BAD_LEVEL = {"host": "0.0.0.0", "allow_from": ["*"], "dm_policy": "open"}
     ],
     ids=["gateway.platforms", "platforms", "gateway.glasses", "root", "root over extra", "platforms over extra"],
 )
-def test_non_loopback_host_and_allow_all_keys_refused_at_every_location(tmp_path, data):
+def test_bad_bridge_port_and_allow_all_keys_refused_at_every_location(tmp_path, data):
     code, out = check_file(tmp_path, data)
     assert code == admin.EXIT_ERRORS, out
     for needle in (
-        "error: glasses.host: must be a loopback IP literal",
+        "error: glasses.bridge_port: must be an integer 1-65535",
         "error: glasses.allow_from: not allowed",
         "error: glasses.dm_policy: not allowed",
     ):
@@ -209,14 +209,18 @@ print(json.dumps(out))
 DIFF_CASES = [
     {"gateway": {"platforms": {"glasses": {"enabled": True, **BAD_LEVEL, "extra": EXTRA}}}},
     {"glasses": {"enabled": True, **BAD_LEVEL, "extra": EXTRA}},
-    {**plat(), "glasses": {"host": "0.0.0.0", "allow_from": "*", "dm_policy": "open"}},
-    {"gateway": {"glasses": {"enabled": True, "host": "0.0.0.0", "allow_from": ["*"]}}},
-    {"platforms": {"glasses": {"enabled": True, "host": "0.0.0.0", "group_policy": "open", "allow_admin_from": ["*"]}}},
+    {**plat(), "glasses": {"bridge_port": 0, "allow_from": "*", "dm_policy": "open"}},
+    {"gateway": {"glasses": {"enabled": True, "bridge_port": 0, "allow_from": ["*"]}}},
+    {"platforms": {"glasses": {"enabled": True, "bridge_port": 0, "group_policy": "open", "allow_admin_from": ["*"]}}},
     {
-        "gateway": {"platforms": {"glasses": {"enabled": True, "extra": {"host": "::1"}}}},
-        "glasses": {"extra": {"host": "0.0.0.0"}},
+        "gateway": {"platforms": {"glasses": {"enabled": True, "extra": {"bridge_port": 9000}}}},
+        "glasses": {"extra": {"bridge_port": 0}},
     },
-    {"gateway": {"platforms": {"glasses": {"enabled": True, "host": "0.0.0.0", "extra": {**EXTRA, "host": "::1"}}}}},
+    {
+        "gateway": {
+            "platforms": {"glasses": {"enabled": True, "bridge_port": 0, "extra": {**EXTRA, "bridge_port": 9000}}}
+        }
+    },
 ]
 
 
@@ -269,7 +273,6 @@ def _live_scratch(root: Path, stt_provider=True) -> Path:
     home = root / "home"
     (root / "state").mkdir(mode=0o700)
     extra = {
-        "port": free_port(),
         "bridge_port": free_port(),
         "public_url": "wss://localhost/ws",
         "state_dir": str(root / "state"),

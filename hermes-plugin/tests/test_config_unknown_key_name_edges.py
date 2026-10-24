@@ -26,7 +26,7 @@ from glasses.config_core import is_key_like, key_name
 
 from conftest import PLUGIN_ROOT
 
-BASE = {"host": "127.0.0.1", "port": 8765, "bridge_port": 8766}
+BASE = {"bridge_port": 8766}
 FAKE_TOKEN = "ghp_" + "Zq7x" * 9  # fake token shape, built at run time
 
 # (id, name): names that look like a key name to a person but are not key-like by the rule.
@@ -96,22 +96,22 @@ def test_lookalike_or_invisible_character_name_is_a_placeholder(key: str) -> Non
 )
 def test_key_like_shape_boundaries(key: str, shown: bool) -> None:
     assert is_key_like(key) is shown
-    assert key_name(key, "port") == (key if shown else placeholder(key))
+    assert key_name(key, "lanes") == (key if shown else placeholder(key))
 
 
 @pytest.mark.parametrize(
     ("key", "hint"),
     [
-        ("hostxx", "host"),
-        ("hostxxx", None),
-        ("ohst", "host"),
+        ("edgexx", "edge"),
+        ("edgexxx", None),
+        ("dege", "edge"),
         ("client_cert_encodingxxxx", "client_cert_encoding"),
         ("client_cert_encodingxxxxx", None),
         ("Client-Cert-Encodnig", "client_cert_encoding"),
         ("lng_thrshold", "long_threshold"),
         ("lng_thrshld", None),
-        ("port12", "port"),
-        ("port123", None),
+        ("edge12", "edge"),
+        ("edge123", None),
     ],
     ids=[
         "2-edits-of-4",
@@ -160,11 +160,11 @@ def test_huge_integer_key_is_a_placeholder() -> None:
 @pytest.mark.parametrize(
     ("key", "known"),
     [
-        ("hots\n", "host"),
-        ("h\u043est", "host"),
-        ("port\u200b", "port"),
+        ("edgx\n", "edge"),
+        ("\u0435dge", "edge"),
+        ("edge\u200b", "edge"),
         ("lanes\u202e", "lanes"),
-        ("port@" + FAKE_TOKEN, "port"),
+        ("edge@" + FAKE_TOKEN, "edge"),
     ],
     ids=["line-feed", "cyrillic-o", "zero-width", "rtl-override", "token-suffix"],
 )
@@ -214,7 +214,7 @@ def test_gateway_log_shows_placeholders_for_lookalike_and_token_names(caplog: py
 
 def test_config_check_cli_output_names_only_key_like_names(tmp_path: Path) -> None:
     url_key, lookalike = "wss://u:pw@h.example.com/ws", "c\u043elour"
-    extra: dict[str, Any] = {**BASE, "hots": "127.0.0.1", FAKE_TOKEN: 1, url_key: 2, lookalike: 3}
+    extra: dict[str, Any] = {**BASE, "edgx": "x", FAKE_TOKEN: 1, url_key: 2, lookalike: 3}
     extra["signer"] = {"user": "", FAKE_TOKEN + "x": 4}
     config = tmp_path / "config.yaml"
     data = {"gateway": {"platforms": {"glasses": {"enabled": True, "extra": extra}}}}
@@ -232,7 +232,7 @@ def test_config_check_cli_output_names_only_key_like_names(tmp_path: Path) -> No
     assert proc.returncode == 0, proc.stdout + proc.stderr
     *lines, summary = proc.stdout.splitlines()
     assert sorted(lines) == sorted([
-        "warning: glasses.hots: unknown key, ignored — did you mean host?",
+        "warning: glasses.edgx: unknown key, ignored — did you mean edge?",
         f"warning: glasses.{placeholder(FAKE_TOKEN)}: unknown key, ignored",
         f"warning: glasses.{placeholder(url_key)}: unknown key, ignored",
         f"warning: glasses.{placeholder(lookalike)}: unknown key, ignored",

@@ -1,0 +1,21 @@
+{
+  "$comment": "SPDX-License-Identifier: Apache-2.0",
+  "description": "Lexical cases every decoder of the envelope agrees on (the server codec and the phone's decodeEnvelope; both test suites read this file). bareValues: a value written without quotes inside an open object (skill.call.args, skill.result.output, a skill.manifest.skills[] item) must be true, false, null or a number of RFC 8259; refused ones are invalid JSON, a number with a fraction or exponent must be finite (1e999 is refused, 1e-999 is not) and an integer literal may have at most integerDigits digits (the sign does not count). stringCharacters: code points that appear raw (not escaped) inside a string; every one below U+0020 is refused. escapes: backslash sequences inside a string, given as the text between the quotes. whitespace: code points between tokens; only the four of JSON are accepted. Nesting (35 open brackets, 36 refused) is built by the tests.",
+  "integerDigits": 4300,
+  "bareValues": {
+    "accepted": ["0", "-0", "10", "-0.0", "1.5e3", "1E5", "1e+5", "1e-999", "0e99999999999999999999", "true", "false", "null"],
+    "refused": ["NaN", "Infinity", "-Infinity", "1e999", "-1e999", "01", "+1", "abc", "'x'", "1.", ".5", "-", "--1", "1e", "1.e3", "1_0", "0x10", "tru", "True", "nul", "undefined"]
+  },
+  "stringCharacters": {
+    "accepted": [32, 127, 133, 8232],
+    "refused": [0, 1, 8, 9, 10, 13, 27, 31]
+  },
+  "escapes": {
+    "accepted": ["\\n", "\\t", "\\b", "\\f", "\\r", "\\/", "\\\"", "\\\\", "\\u0041", "\\u00e9", "\\ud83d\\ude00"],
+    "refused": ["\\x", "\\a", "\\'", "\\u12G4", "\\u12", "\\u", "\\\n", "\\ "]
+  },
+  "whitespace": {
+    "accepted": [9, 10, 13, 32],
+    "refused": [0, 11, 12, 133, 160, 8232, 65279]
+  }
+}

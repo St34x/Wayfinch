@@ -32,6 +32,7 @@ REFUSALS = {
     "seq": ("invalid_seq", "seq"),
     "ts": ("invalid_frame", "feb_29"),
     "surrogate": ("invalid_text", "invalid_text"),
+    "integer": ("invalid_frame", "not_integer"),
 }
 
 
@@ -114,3 +115,19 @@ def test_every_codec_fixture_has_a_direction_the_codec_handles() -> None:
     assert codec
     assert {e["dir"] for e in codec} <= {"d2s", "s2d"}
     assert {broken_rule(e) for e in INDEX["codec-invalid"]} <= set(REFUSALS)
+
+
+def repaired(entry: dict[str, Any], text: str) -> str:
+    """The raw-invalid frame with its one defect fixed: only that defect was wrong."""
+    if entry["defect"] == "repeated-key":  # the "last one wins" reading
+        return json.dumps(json.loads(text))
+    assert text.count(entry["repair"]["find"]) == 1
+    return text.replace(entry["repair"]["find"], entry["repair"]["replace"])
+
+
+@pytest.mark.parametrize("entry", entries("raw-invalid"))
+def test_raw_invalid_fixture_is_refused_as_invalid_json_and_its_repair_is_a_good_frame(entry: dict[str, Any]) -> None:
+    text = raw("raw-invalid", entry)
+    assert refusal_code(text) == "invalid_json"
+    assert refusal_code(text.encode("utf-8")) == "invalid_json"
+    assert decode(repaired(entry, text), VALIDATOR)

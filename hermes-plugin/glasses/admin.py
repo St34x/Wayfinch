@@ -30,7 +30,7 @@ printed in its stripped, lower-cased form. A
 refused before it is converted to a path (exit 2, one line, the value not shown).
 
 ``--live`` adds what needs this host and the Hermes install (``live_problems``): the state dir exists
-with mode 0700, ``port``/``bridge_port`` are free on ``host``, ``public_url`` is set and its host
+with mode 0700, ``bridge_port`` is free on 127.0.0.1, ``public_url`` is set and its host
 resolves, every lane is routed (``gateway.profile_routes``; no route = the default profile) to a
 profile this gateway serves, and for each routed profile: an ``stt.provider`` (unset = a warning: Hermes
 auto-detects one), ``stt.language`` not
@@ -54,7 +54,7 @@ allow-all gate the way Hermes' bridge delivers it to the gateway. Plugins instal
 not discovered (tool parity is computed from the configuration). Hermes' own log output is silenced. Tests inject
 fakes through ``Probes``.
 
-T1.45 contract-test list (private Hermes APIs and copied Hermes behaviour, pinned a4648c5f58): see the
+T1.45 contract-test list (private Hermes APIs and copied Hermes behaviour, pinned d923a5eb48): see the
 docstring of ``glasses.hermes_facts``.
 """
 
@@ -71,7 +71,7 @@ from pathlib import Path
 from typing import TextIO
 from urllib.parse import urlsplit
 
-from . import admin_crl, admin_devices
+from . import admin_common, admin_crl, admin_devices
 from .admin_common import SECTION, ConfigFileError, hermes_home, read_platform_section, shown_path
 from .admin_names import mask_lines, names_shown, shown_name, shown_problem
 from .config import (
@@ -96,9 +96,11 @@ from .hermes_facts import (  # noqa: F401 - re-exported: tests and callers use a
     stt_language,
 )
 from .hermes_merge import PlatformView
+from .hermes_refs import not_checked
 
 EXIT_OK, EXIT_ERRORS, EXIT_UNREADABLE = 0, 1, 2
 STATE_DIR_MODE = 0o700
+BRIDGE_HOST = "127.0.0.1"  # the phone bridge binds loopback only; its port is ``bridge_port``
 
 
 @dataclass
@@ -183,12 +185,11 @@ def _state_dir_problems(path: Path, report: Report) -> None:
 
 
 def _host_problems(cfg: GlassesConfig, probes: Probes, report: Report) -> None:
-    for key, port in (("port", cfg.port), ("bridge_port", cfg.bridge_port)):
-        if not probes.port_free(cfg.host, port):
-            report.errors.append(
-                f"{PLATFORM_NAME}.{key}: {cfg.host}:{port} is in use — stop what holds it or "
-                f"pick another port (a running glasses gateway holds it too)"
-            )
+    if not probes.port_free(BRIDGE_HOST, cfg.bridge_port):
+        report.errors.append(
+            f"{PLATFORM_NAME}.bridge_port: {BRIDGE_HOST}:{cfg.bridge_port} is in use — stop what holds it or "
+            f"pick another port (a running glasses gateway holds it too)"
+        )
     if not cfg.public_url:
         report.errors.append(
             f"{PLATFORM_NAME}.public_url: not set — the app needs the wss:// URL of your TLS "
@@ -222,7 +223,7 @@ def profile_problems(
 ) -> Report:
     """Problems of one routed profile (names and numbers only)."""
     where = f"profile {shown_name(name)}"
-    report = Report()
+    report = Report(warnings=[f"{where}: {not_checked(field)}" for field in facts.unchecked])
     out = report.errors
     if not facts.stt_provider:  # unset = Hermes auto-detects a provider; voice may still work
         report.warnings.append(
@@ -282,7 +283,8 @@ def live_problems(cfg: GlassesConfig, hermes_home: Path, probes: Probes) -> Repo
     report.errors.extend(
         f"allow-all gate: {shown_problem(p)}" for p in facts.gate_problems if not p.startswith("process environment:")
     )
-    for name in _routed_profiles(cfg, facts, report):
+    report.warnings.extend(not_checked(field) for field in facts.unchecked)  # then no lane and no profile is checked
+    for name in [] if facts.unchecked else _routed_profiles(cfg, facts, report):
         report.extend(profile_problems(name, facts.profiles[name], cfg.language_hints, facts.known_toolsets))
     return Report(mask_lines(report.errors, facts.env_values), mask_lines(report.warnings, facts.env_values))
 
@@ -317,19 +319,9 @@ def _live_home_mismatch(args: argparse.Namespace, home: Path, probes: Probes) ->
     )
 
 
-def _local_paths(args: argparse.Namespace) -> argparse.Namespace:
-    """*args* with ``--config`` and ``--hermes-home`` as ``Path``s. ``Path`` collapses ``//``, so a URL is
-    recognised on the raw argv string, before the conversion (``ConfigFileError``; the value is not shown)."""
-    for flag, value in (("--config", args.config), ("--hermes-home", args.hermes_home)):
-        if value is not None and "://" in str(value):
-            raise ConfigFileError(f"{flag}: not a local path (it contains '://'; the value is not shown)")
-    paths = {key: None if getattr(args, key) is None else Path(getattr(args, key)) for key in ("config", "hermes_home")}
-    return argparse.Namespace(**{**vars(args), **paths})
-
-
 def config_check(args: argparse.Namespace, env: Mapping[str, str], out: TextIO, probes: Probes) -> int:
     try:
-        args = _local_paths(args)
+        args = admin_common.local_paths(args, env)
     except ConfigFileError as exc:
         print(f"error: {exc}", file=out)
         return EXIT_UNREADABLE

@@ -23,7 +23,7 @@ def pc(extra=None, enabled=True):
 # importing the package never imports Hermes (fresh interpreter, import blocker)
 # --------------------------------------------------------------------------------------------
 
-# Top-level modules/packages of the pinned Hermes tree (hermes-agent @ a4648c5f58): anything named here or
+# Top-level modules/packages of the pinned Hermes tree (hermes-agent @ d923a5eb48): anything named here or
 # starting with "hermes" is Hermes.
 HERMES_TOP_LEVEL = (
     "acp_adapter",
@@ -71,7 +71,7 @@ _PROBE = textwrap.dedent("""
     ctx = Ctx()
     glasses.register(ctx)
     assert ctx.kw["name"] == "glasses"
-    glasses.validate_config(SimpleNamespace(enabled=True, extra={{"host": "0.0.0.0"}}))
+    glasses.validate_config(SimpleNamespace(enabled=True, extra={{"bridge_port": 0}}))
     glasses.is_connected(SimpleNamespace(enabled=True, extra={{}}))
     glasses.check_requirements()
     glasses.config.load({{}})

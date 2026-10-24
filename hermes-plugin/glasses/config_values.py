@@ -4,10 +4,10 @@
 A pure core module (``core-purity`` in ``.importlinter``; ``tools/quality/check_core_purity.py``): no I/O, no
 ``os``. The schema arrives as a parsed mapping.
 
-* ``host`` is a loopback IP literal (hostnames, ``localhost`` included, are refused);
 * ``public_url`` is empty or a strict ``wss://`` URL, stored in normal form;
-* ``state_dir``, ``signer.socket`` and ``signer.public_dir`` are absolute paths without
-  surrounding whitespace or control characters (or empty); ``signer.socket`` at most 107 bytes in UTF-8;
+* ``state_dir``, ``signer.socket``, ``signer.public_dir`` and ``edge.socket`` are absolute paths without
+  surrounding whitespace or control characters (or empty); the two sockets at most 107 bytes in UTF-8 and
+  ``edge.socket`` without a ``..`` component; ``edge.user`` is never ``root``;
 * keys the schema does not declare are dropped with a warning (``prune``); the warning names the key only when it
   is a key-like near-miss of a key at the same level, with a did-you-mean hint.
 """
@@ -39,23 +39,7 @@ from .config_core import (
 # One DNS label (public_url host); the whole name is at most 253 characters.
 DNS_LABEL_RE = re.compile(r"[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?")
 PUBLIC_URL_SCHEMES = ("wss",)
-
-
-def is_loopback_host(host: Any) -> bool:
-    """True only for a loopback IP literal (127.0.0.0/8, ::1).
-
-    Hostnames are refused, ``localhost`` included: what they resolve to is outside the plugin's
-    control, and binding beyond loopback would expose the gateway (docs/architecture.md section 4).
-    """
-    if not isinstance(host, str) or host != host.strip():
-        return False
-    try:
-        addr = ipaddress.ip_address(host)
-    except ValueError:
-        return False
-    if isinstance(addr, ipaddress.IPv6Address) and (addr.ipv4_mapped is not None or addr.scope_id):
-        return False  # only plain ::1; Python >= 3.13 calls ::ffff:127.0.0.1 loopback too
-    return addr.is_loopback
+USER_NAME_RE = re.compile(r"(?:[a-z_][a-z0-9_-]{0,31})?")  # = the pattern of ``edge.user``
 
 
 def _is_clean_str(value: Any) -> bool:
@@ -71,6 +55,16 @@ def _empty_or_abs_path(value: Any) -> bool:
 def _empty_or_socket_path(value: Any) -> bool:
     """``_empty_or_abs_path`` that also fits an ``AF_UNIX`` address: at most 107 bytes in UTF-8."""
     return value in (None, "") or (_empty_or_abs_path(value) and len(value.encode("utf-8", "surrogatepass")) <= 107)
+
+
+def _empty_or_edge_socket(value: Any) -> bool:
+    """``_empty_or_socket_path`` without a ``..`` component: the listener binds exactly the configured path."""
+    return _empty_or_socket_path(value) and (not value or ".." not in value.split("/"))
+
+
+def _edge_user(value: Any) -> bool:
+    """A system user name other than ``root``; ``fullmatch`` also refuses the trailing newline a ``$`` admits."""
+    return value is None or (isinstance(value, str) and value != "root" and USER_NAME_RE.fullmatch(value) is not None)
 
 
 def _public_host(hostname: str) -> str | None:
@@ -127,7 +121,8 @@ def _valid_public_url(value: Any) -> bool:
 
 # Rules a schema cannot express, checked only where the schema found nothing.
 SEMANTIC_RULES: tuple[tuple[tuple[str, ...], Callable[[Any], bool]], ...] = (
-    (("host",), is_loopback_host),
+    (("edge", "socket"), _empty_or_edge_socket),
+    (("edge", "user"), _edge_user),
     (("public_url",), _valid_public_url),
     (("state_dir",), _empty_or_abs_path),
     (("signer", "socket"), _empty_or_socket_path),
@@ -173,10 +168,11 @@ def build(own: Mapping[str, Any]) -> GlassesConfig:
     v = {**DEFAULTS, **own}
     long_answers = {**DEFAULTS["long_answers"], **(v["long_answers"] or {})}
     signer = {**DEFAULTS["signer"], **(v["signer"] or {})}
+    edge = {**DEFAULTS["edge"], **(v["edge"] or {})}
     meeting = v["meeting"] or {}
     return GlassesConfig(
-        host=v["host"],
-        port=v["port"],
+        edge_socket=edge["socket"] or "",
+        edge_user=edge["user"] or "",
         bridge_port=v["bridge_port"],
         state_dir=v["state_dir"] or None,
         public_url=normalise_public_url(v["public_url"]) or "",

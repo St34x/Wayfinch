@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- One base-config for every host (the server comes from enrolment, no hostname at build time): no cleartext, no encrypted
+     Client Hello, system trust anchors only (the CA-set pin lives in OkHttp, T1.24a; custom anchors switch
+     Certificate Transparency off). No domain-config, no debug-overrides, no pin-set (SAT-PL-04). -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false">
+        <domainEncryption mode="disabled" />
+    </base-config>
+</network-security-config>

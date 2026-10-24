@@ -4,7 +4,8 @@
 The envelope's `allOf` holds two kinds of `if`/`then` blocks keyed on `type`: the body dispatch (const X -> `body`
 $ref `#/$defs/body.X`, exactly one per type, every body.* def bound) and the `seq` rule (required / forbidden for an
 enum of types). The direction of each type comes from the "Message types" table of protocol/README.md (the schema
-cannot see it) and must agree with the seq rule: S→D types require seq, D→S types forbid it.
+cannot see it) and must agree with the seq rule: S→D types require seq, D→S types forbid it, except the S→D types in
+`UNNUMBERED_S2D` (`welcome`: outside the outbox numbering), which forbid it.
 """
 
 import re
@@ -34,6 +35,7 @@ ROOT_KEYS = ANNOTATIONS | {"$schema", "$id", "type", "properties", "required", "
 DIRECTION_ROW = re.compile(r"\|\s*`(?P<type>[^`]+)`\s*\|\s*(?P<dir>D→S|S→D|both)\s*\|")
 DIRECTIONS: dict[str, Direction] = {"D→S": "D→S", "S→D": "S→D", "both": "both"}
 TYPES_SECTION = "## Message types"
+UNNUMBERED_S2D = frozenset({"welcome"})  # S→D types outside the outbox numbering: the schema forbids their `seq`
 
 
 def parse_directions(readme: str, frame_types: tuple[str, ...]) -> dict[str, Direction]:
@@ -121,9 +123,17 @@ def _seq_rule(name: str, dispatch: _Dispatch, direction: Direction) -> SeqRule:
         rule = "required"
     elif name in dispatch.seq_absent:
         rule = "absent"
-    if (direction == "S→D") != (rule == "required") or (direction == "D→S" and rule != "absent"):
+    if not _seq_rule_fits(name, direction, rule):
         raise CodegenError(f"#/allOf: type {name!r} is {direction} in protocol/README.md but seq is {rule}")
     return rule
+
+
+def _seq_rule_fits(name: str, direction: Direction, rule: SeqRule) -> bool:
+    if name in UNNUMBERED_S2D:
+        return direction == "S→D" and rule == "absent"
+    if direction == "S→D":
+        return rule == "required"
+    return rule == "absent" if direction == "D→S" else rule != "required"
 
 
 def _alias(builder: TypeBuilder, name: str, node: object) -> Alias:

@@ -1,11 +1,13 @@
 # SPDX-License-Identifier: Apache-2.0
 """The environment side of ``glasses.hermes_facts``: ``<home>/.env`` read-only, the overlay it makes on
-``os.environ`` while the pure config reads run, the masking of its values, and Hermes' log silence.
+``os.environ`` while the pure config reads run, the one rule for a route name, and Hermes' log silence.
 
-``<home>/.env`` is data, not code: a value of it (four characters or more) must never reach the output (``mask_values``
-replaces it; ``name_unless_from_env`` hides a route name that equals any value; a value padded with white space
-inside quotes is matched by neither, see ``name_unless_from_env``), and a
-name that makes Hermes load code or touch another directory (``PATH``, ``LD_*``, ``PYTHON*``, ``HOME``, the plugin
+``<home>/.env`` is data, not code. The check does not evaluate an environment reference (``${VAR}``) of
+``config.yaml``: it skips the field and prints one fixed line (``glasses.hermes_refs``). Nothing is masked or compared
+with a value, because "this text equals / contains a value" would show in the output (an oracle for whoever edits
+``config.yaml``); a name from a config file is printed only if it comes from a set that exists without any
+environment value (``name_if_served``, the toolset table, the gate-line shape; see the ``glasses.admin`` docstring).
+A name that makes Hermes load code or touch another directory (``PATH``, ``LD_*``, ``PYTHON*``, ``HOME``, the plugin
 and managed-overlay switches ...) is not overlaid (``overlay_name_ok``). The file must be a regular file of at most
 ``MAX_ENV_FILE_BYTES`` (no FIFO that blocks the read, no symlink out of the home, no huge file), else it counts as
 absent. The T1.45 contract-test list in ``glasses.hermes_facts`` names the Hermes pieces used here.
@@ -15,10 +17,9 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import stat
 import warnings
-from collections.abc import Container, Iterable, Iterator, Mapping
+from collections.abc import Container, Iterator, Mapping
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -27,9 +28,8 @@ from .config_access import GATEWAY_ALLOW_ALL_ENV, HERMES_TRUTHY
 
 HOME_ENV = "HERMES_HOME"
 MAX_ENV_FILE_BYTES = 1 << 20
-MIN_MASKED_LENGTH = 4  # shorter values (``1``, ``en``) would blank out ordinary words in the output
-MASK = "<.env value>"
-HIDDEN_NAME = "<a name taken from the environment>"  # not an identifier: ``admin_names.shown_name`` never shows it
+# Not an identifier, so ``admin_names.shown_name`` never shows it.
+HIDDEN_NAME = "<a profile name this gateway does not serve>"
 # Names Hermes reads to find code or directories (plugin discovery, the managed overlay, the dynamic loader, the
 # interpreter, the home): never overlaid, whatever the file says.
 NOT_OVERLAID_NAMES = frozenset({
@@ -121,28 +121,12 @@ def environ_with(values: Mapping[str, str]) -> Iterator[None]:
                 os.environ[name] = before
 
 
-def secret_values(*envs: Mapping[str, str]) -> frozenset[str]:
-    """Every value of the given ``.env`` maps that ``mask_values`` hides (``MIN_MASKED_LENGTH`` or longer)."""
-    return frozenset(v for env in envs for v in env.values() if len(v) >= MIN_MASKED_LENGTH)
-
-
-def mask_values(text: str, values: Iterable[str]) -> str:
-    """*text* with every occurrence of every value replaced by ``MASK`` (case-insensitive: Hermes lower-cases the
-    profile names it returns). Values shorter than ``MIN_MASKED_LENGTH`` are not in *values* (``secret_values``)."""
-    found = sorted(set(values), key=len, reverse=True)
-    return re.sub("|".join(map(re.escape, found)), MASK, text, flags=re.IGNORECASE) if found else text
-
-
-def name_unless_from_env(name: str, served: Container[str], *envs: Mapping[str, str]) -> str:
-    """A routed profile *name* Hermes returned, or ``HIDDEN_NAME`` when it is not served and equals (any case) a
-    value of one of *envs*: a ``${VAR}`` expanded to it. That covers what ``mask_values`` leaves out, a ``.env``
-    value shorter than ``MIN_MASKED_LENGTH`` and a process-environment value. Only the whole name is compared:
-    a value inside a longer name is hidden by ``mask_values`` (four characters or more), else shown. A value padded
-    with white space inside quotes is not matched (Hermes strips the name, the comparison uses the raw value)."""
-    word = name.lower()
-    if name in served or not any(value.lower() == word for env in envs for value in env.values()):
-        return name
-    return HIDDEN_NAME
+def name_if_served(name: str, served: Container[str]) -> str:
+    """A routed profile *name* Hermes returned if this gateway serves it, else ``HIDDEN_NAME``, whatever the name
+    looks like. A served name comes from Hermes' profile list, not from the config; any other name is config text (a
+    ``${VAR}`` may have expanded to it) and is never printed. There is deliberately no other input: whether the name
+    equals, contains or is padded around an environment value must not decide anything (T1.196a)."""
+    return name if name in served else HIDDEN_NAME
 
 
 def allow_all_granted(layers: Any) -> bool:

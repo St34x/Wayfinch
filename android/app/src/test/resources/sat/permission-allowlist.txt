@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+# SAT-PL-09: the permissions of the merged release manifest of :app, exactly. A task that needs another permission
+# adds its row here in its own diff (security gate); a permission a library merges is removed with tools:node="remove"
+# in app/src/main/AndroidManifest.xml or added here. Denied permissions (ManifestRules.DENIED_PERMISSIONS) fail
+# whatever this file says.
+android.permission.INTERNET
+android.permission.FOREGROUND_SERVICE
+android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE
+android.permission.CHANGE_NETWORK_STATE

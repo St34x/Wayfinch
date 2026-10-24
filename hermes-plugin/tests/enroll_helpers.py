@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import ipaddress
 import os
 from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass
@@ -48,8 +49,22 @@ def factory(fake: fake_signer.FakeSigner, enrol_s: float = 2.0) -> Callable[[], 
     return lambda: SignerClient(fake.socket_path, os.geteuid(), timeouts=timeouts)
 
 
+def is_loopback_peer(request: web.BaseRequest) -> bool:
+    """Test predicate (the relay's old default, out of production since the edge-peer check): True only when the
+    transport's peer is a loopback IP address (no transport, a unix socket or junk: False)."""
+    transport = request.transport
+    peer = transport.get_extra_info("peername") if transport is not None else None
+    if not isinstance(peer, tuple) or not peer or not isinstance(peer[0], str):
+        return False
+    try:
+        return ipaddress.ip_address(peer[0]).is_loopback
+    except ValueError:
+        return False
+
+
 def relay_for(fake: fake_signer.FakeSigner, **kwargs: Any) -> EnrollRelay:
     kwargs.setdefault("limiter", RateLimiter(per_minute=1000))
+    kwargs.setdefault("peer_allowed", is_loopback_peer)
     return EnrollRelay(factory(fake, kwargs.pop("enrol_s", 2.0)), **kwargs)
 
 

@@ -290,7 +290,6 @@ class HelloFrame(FrameHeader):
 
 class WelcomeFrame(FrameHeader):
     type: Literal["welcome"]
-    seq: int
     body: WelcomeBody
 
 

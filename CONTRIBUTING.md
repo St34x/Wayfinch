@@ -23,8 +23,8 @@ The gates enforce most of it.
    the protocol, config keys, CLI, defaults, error messages and the security model. If you solved a problem others may
    hit, add an entry to [docs/troubleshooting/](docs/troubleshooting/INDEX.md).
 5. Generated files are never edited by hand. After a schema change, regenerate and commit:
-   `.local/venv-dev/bin/python tools/codegen/gen_protocol.py` (protocol schema) or
-   `.local/venv-dev/bin/python tools/codegen/gen_config_docs.py` (plugin config schema).
+   `sh tools/codegen/regenerate.sh .local/venv-dev/bin/python` (protocol schema: the Python types and the Kotlin
+   `Envelope.kt`) or `.local/venv-dev/bin/python tools/codegen/gen_config_docs.py` (plugin config schema).
 6. A new direct dependency needs a `# direct: <name> (<scope>)` line and hash pins in `requirements-dev.txt`, a
    `## Python` row in [docs/dependencies.md](docs/dependencies.md) and the "all N pins" sentence there updated;
    `make check-ledger` checks it.

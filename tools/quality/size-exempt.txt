@@ -24,3 +24,6 @@ NOTICE
 
 # Vendored upstream code: the task that vendors it adds one exact path per upstream-shaped file listed in its
 # UPSTREAM.md (android/third_party/<name>/...); files we add there follow the limits.
+android/third_party/g2-driver/src/main/kotlin/app/hudcompanion/g2driver/sgcs/G2.kt
+android/third_party/g2-driver/src/main/kotlin/app/hudcompanion/g2driver/sgcs/G2SerialResolution.kt
+android/third_party/g2-driver/src/main/kotlin/app/hudcompanion/g2driver/utils/G2Text.kt

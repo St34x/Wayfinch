@@ -2,7 +2,9 @@
 """What ``glasses-admin config check --live`` may print of the names Hermes returns (profile, tool and gate-problem
 names), which come from config files and can hold anything: a URL, a credential, a ``${VAR}`` expansion of a
 ``.env`` value, a line break or an escape sequence that would forge a ``config check:`` line, a very long token.
-See the ``glasses.admin`` docstring for the rules."""
+A name is printed only if it comes from a set that exists without any environment value: a served profile
+(an identifier), Hermes' toolset table, a gate line of the known shape. The check never compares config text with an
+environment value or masks one (the output would depend on it: T1.196a). See the ``glasses.admin`` docstring."""
 
 from __future__ import annotations
 
@@ -11,17 +13,18 @@ from collections.abc import Iterable
 
 from .config import may_hold_credentials
 from .config_core import is_key_like
-from .hermes_env import mask_values
 
 MAX_LISTED_TOOLS = 10
 
 
 def shown_name(name: str, quote: bool = False) -> str:
-    """A profile name Hermes returned, for a message: only an identifier (``glasses.config.is_key_like``: a letter,
-    then letters, digits, ``_``, ``-``, at most 32 characters). A name from a config file may be a URL, a
-    credential, an expanded ``.env`` value or hold a line break or an escape sequence: it is not shown."""
+    """A profile name for a message: only the name of a served profile that is an identifier
+    (``glasses.config.is_key_like``: a letter, then letters, digits, ``_``, ``-``, at most 32 characters). Route
+    names that are not served arrive as ``hermes_env.HIDDEN_NAME`` (``hermes_facts``), which is no identifier. A name
+    from a config file may be a URL, a credential, an expanded ``.env`` value or hold a line break or an escape
+    sequence: it is not shown."""
     if not is_key_like(name):
-        return "<a profile name not shown: it is not a plain identifier or it comes from the environment>"
+        return "<a profile name not shown: only a served profile with a plain identifier name is printed>"
     return repr(name) if quote else name
 
 
@@ -54,7 +57,7 @@ def names_shown(names: Iterable[str], known: frozenset[str]) -> str:
 
 
 def mask_lines(lines: Iterable[str], env_values: Iterable[str]) -> list[str]:
-    """*lines* without any value of the ``.env`` files the facts were read with (a ``${VAR}`` in a config expands
-    to one, and Hermes returns the result as a profile or tool name)."""
-    values = frozenset(env_values)
-    return [mask_values(line, values) for line in lines]
+    """*lines* unchanged. ``glasses.admin.live_problems`` still passes ``HermesFacts.env_values`` through here; since
+    T1.196a nothing is masked, because masking by an environment value makes the output depend on that value (a line
+    holding config text would show whether the config text equals or contains it). Both go with that call."""
+    return list(lines)

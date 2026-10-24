@@ -97,10 +97,10 @@ def test_every_key_has_one_row_with_six_cells() -> None:
     keys = [row.split("`", 2)[1] for row in rows]
     assert keys == _paths(SCHEMA["properties"])
     assert all(len(re.split(r"(?<!\\)\|", row)) == 8 for row in rows)
-    port = next(row for row in rows if row.startswith("| `port`"))
-    assert port == (
-        "| `port` | integer | `8765` | 1–65535 | `8765` | **Planned** — accepted and validated, no effect yet. "
-        "Loopback WebSocket port the TLS edge proxies /ws to. |"
+    bridge = next(row for row in rows if row.startswith("| `bridge_port`"))
+    assert bridge == (
+        "| `bridge_port` | integer | `8766` | 1–65535 | `8766` | **Planned** — accepted and validated, no effect yet. "
+        "Loopback port of the phone bridge (MCP server), bound on 127.0.0.1. |"
     )
 
 
@@ -120,8 +120,8 @@ def test_example_passes_the_plugin_validator() -> None:
 @pytest.mark.parametrize(
     "mutate",
     [
-        lambda s: s["properties"]["port"].update(description="Changed."),
-        lambda s: s["properties"]["port"].update(maximum=65534),
+        lambda s: s["properties"]["bridge_port"].update(description="Changed."),
+        lambda s: s["properties"]["bridge_port"].update(maximum=65534),
         lambda s: s["properties"]["meeting"]["properties"].pop("live_notes"),
         lambda s: s["properties"].update(extra_key={"type": "boolean", "default": True}),
     ],
@@ -232,16 +232,19 @@ def test_unreadable_schema_exits_2_with_one_line(tmp_path: Path, content: str | 
     ("mutate", "expected"),
     [
         (lambda s: s.update(allOf=[]), "#: keyword 'allOf'"),
-        (lambda s: s["properties"]["port"].update(oneOf=[]), "#/properties/port: keyword 'oneOf'"),
+        (lambda s: s["properties"]["bridge_port"].update(oneOf=[]), "#/properties/bridge_port: keyword 'oneOf'"),
         (lambda s: s["$defs"]["lane"].update(format="x"), "#/$defs/lane: keyword 'format'"),
         (lambda s: s["properties"]["lanes"]["items"].update({"$ref": "#/$defs/nope"}), "only an existing local"),
-        (lambda s: s["properties"]["host"].update({"$ref": "other.json#/x"}), "#/properties/host/$ref"),
-        (lambda s: s["properties"]["host"].update({"not": {"type": "null"}}), "#/properties/host/not"),
+        (lambda s: s["properties"]["state_dir"].update({"$ref": "other.json#/x"}), "#/properties/state_dir/$ref"),
+        (lambda s: s["properties"]["state_dir"].update({"not": {"type": "null"}}), "#/properties/state_dir/not"),
         (lambda s: s["properties"]["signer"].pop("additionalProperties"), "additionalProperties: false"),
         (lambda s: s["properties"].pop("public_url"), "EXAMPLES names a key the schema does not have: public_url"),
-        (lambda s: s["properties"]["port"].update(description=1), "must be strings"),
+        (lambda s: s["properties"]["bridge_port"].update(description=1), "must be strings"),
         (lambda s: s.update(properties=[]), "#/properties: expected a JSON object"),
-        (lambda s: s["properties"]["port"].update({"x-status": "done"}), "#/properties/port/x-status: only"),
+        (
+            lambda s: s["properties"]["bridge_port"].update({"x-status": "done"}),
+            "#/properties/bridge_port/x-status: only",
+        ),
         (lambda s: s["properties"]["lanes"].update(items=OBJECT_ITEMS), NESTED_ITEMS),
         (lambda s: s["properties"]["lanes"].update(items={"type": "array", "items": {"maxLength": 3}}), NESTED_ITEMS),
         (lambda s: s["properties"]["lanes"].update(items={"type": ["string", "object"]}), NESTED_ITEMS),
@@ -258,12 +261,12 @@ def test_unsupported_schema_raises_with_pointer(mutate: Mutation, expected: str)
 
 
 def test_unsupported_schema_exits_2(tmp_path: Path) -> None:
-    root = _root_with(tmp_path, lambda s: s["properties"]["port"].update(oneOf=[]))
+    root = _root_with(tmp_path, lambda s: s["properties"]["bridge_port"].update(oneOf=[]))
     done = _run("--root", str(root), "--check")
     assert done.returncode == 2
     assert done.stderr == (
-        f"gen_config_docs: {gen.SCHEMA.as_posix()}#/properties/port: keyword 'oneOf' is not supported by the docs "
-        "generator\n"
+        f"gen_config_docs: {gen.SCHEMA.as_posix()}#/properties/bridge_port: keyword 'oneOf' is not supported by the "
+        "docs generator\n"
     )
 
 
@@ -294,10 +297,10 @@ def test_type_text_forms() -> None:
 
 def test_prose_is_escaped_and_examples_win() -> None:
     schema = copy.deepcopy(SCHEMA)
-    schema["properties"]["port"].update(description="a <b> | *c*", examples=[9000])
-    row = next(line for line in gen.render(schema).splitlines() if line.startswith("| `port`"))
+    schema["properties"]["bridge_port"].update(description="a <b> | *c*", examples=[9000])
+    row = next(line for line in gen.render(schema).splitlines() if line.startswith("| `bridge_port`"))
     assert row.endswith(f"| `9000` | {gen.PLANNED} a \\<b\\> \\| \\*c\\* |")
-    assert "        port: 9000\n" in gen.render(schema)
+    assert "        bridge_port: 9000\n" in gen.render(schema)
 
 
 def _row_of(schema: Any, path: str) -> str:
@@ -307,14 +310,16 @@ def _row_of(schema: Any, path: str) -> str:
 def test_planned_marker_is_rendered_and_inherited() -> None:
     schema = copy.deepcopy(SCHEMA)
     for node in (
-        schema["properties"]["port"],
+        schema["properties"]["bridge_port"],
         schema["properties"]["signer"],
         schema["properties"]["signer"]["properties"]["socket"],
     ):
         node.pop("x-status", None)
     schema["properties"]["signer"]["x-status"] = "planned"
-    assert gen.PLANNED not in _row_of(schema, "port")
-    assert _row_of(schema, "port").endswith("| Loopback WebSocket port the TLS edge proxies /ws to. |")
+    assert gen.PLANNED not in _row_of(schema, "bridge_port")
+    assert _row_of(schema, "bridge_port").endswith(
+        "| Loopback port of the phone bridge (MCP server), bound on 127.0.0.1. |"
+    )
     assert f"| {gen.PLANNED} Absolute path of the signer's unix socket" in _row_of(schema, "signer.socket")
     schema["properties"]["meeting"]["properties"]["enabled"].pop("x-status")
     assert _row_of(schema, "meeting.enabled").endswith(f"| {gen.PLANNED} |")

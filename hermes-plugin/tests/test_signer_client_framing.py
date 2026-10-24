@@ -141,7 +141,7 @@ def test_a_deadline_expired_after_connect_is_a_timeout_and_nothing_is_sent(fake,
     assert fake.requests == []
 
 
-# The answer is read until the signer closes (brief section 4: one line, then close)
+# The answer is read until the signer closes (signer protocol: one line, then close)
 
 
 @contextlib.contextmanager

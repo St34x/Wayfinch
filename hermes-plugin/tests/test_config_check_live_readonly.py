@@ -216,8 +216,8 @@ home = Path(os.environ["HERMES_HOME"])
 (home / "profiles" / "work").mkdir(parents=True)
 route = {"platform": "glasses", "chat_id": "glasses:work", "profile": "work"}
 (home / "config.yaml").write_text(yaml.safe_dump({"gateway": {"multiplex_profiles": True, "profile_routes": [route]},
-    "stt": {"provider": "local"}, "approvals": {"timeout": "${APPROVAL_TIMEOUT}"}}))
-(home / "profiles" / "work" / "config.yaml").write_text(yaml.safe_dump({"approvals": {"timeout": "${WORK_TIMEOUT}"}}))
+    "stt": {"provider": "local"}, "approvals": {"timeout": 0}}))
+(home / "profiles" / "work" / "config.yaml").write_text(yaml.safe_dump({"approvals": {"timeout": 7}}))
 (home / ".env").write_text(sys.argv[1])
 (home / "profiles" / "work" / ".env").write_text("WORK_TIMEOUT=7\\n")
 files = [home / ".env", home / "profiles" / "work" / ".env"]
@@ -237,8 +237,7 @@ def test_dotenv_reaches_the_env_facts_and_the_process_env_and_files_stay_as_they
     assert proc.returncode == 0, proc.stderr[-2000:]
     result = json.loads(proc.stdout.strip().splitlines()[-1])
     assert result["env_same"] and result["files_same"] and result["served"] == ["default", "work"], result
-    # HERMES_LOCAL_STT_LANGUAGE comes from the launch .env for every profile; ${VAR} refs see the launch .env
-    # (default) and, for a routed profile, its own .env
+    # HERMES_LOCAL_STT_LANGUAGE comes from the launch .env for every profile
     assert result["default"] == ["en", 0] and result["work"] == ["en", 7], result
     assert DOTENV_CANARY not in proc.stdout + proc.stderr
 
@@ -248,7 +247,7 @@ def test_real_live_reports_what_only_the_dotenv_makes_wrong_and_prints_no_dotenv
         home, user = _live_scratch(Path(tmp)), Path(tmp) / "user"
         user.mkdir()
         config = yaml.safe_load((home / "config.yaml").read_text(encoding="utf-8"))
-        config["approvals"]["timeout"] = "${APPROVAL_TIMEOUT}"
+        config["approvals"]["timeout"] = "${APPROVAL_TIMEOUT}"  # a reference: not evaluated, whatever the .env holds
         config["gateway"]["platforms"]["glasses"]["extra"]["meeting"] = {"language_hints": ["fr"]}
         (home / "config.yaml").write_text(yaml.safe_dump(config), encoding="utf-8")
         control = _real_live(home, user)  # without a .env: nothing to report
@@ -259,7 +258,7 @@ def test_real_live_reports_what_only_the_dotenv_makes_wrong_and_prints_no_dotenv
     assert control.returncode == admin.EXIT_OK, control.stdout + control.stderr[-2000:]
     assert proc.returncode == admin.EXIT_ERRORS, proc.stdout + proc.stderr[-2000:]
     assert 'error: profile default: stt.language is "en" but meeting.language_hints has fr' in proc.stdout
-    assert "error: profile default: approvals.timeout resolves to 0" in proc.stdout
+    assert "warning: profile default: approvals.timeout: uses an environment reference, not checked" in proc.stdout
     assert after == before and DOTENV_CANARY not in proc.stdout + proc.stderr
 
 

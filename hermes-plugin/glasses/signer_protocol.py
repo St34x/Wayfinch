@@ -9,12 +9,13 @@
   ``error`` plus the one extra its code allows. Anything else raises an ``AnswerRejected`` kind (fail closed); a
   well-formed error answer raises ``SignerRefusal``.
 
-Formats chosen where the brief is silent (the plugin refuses anything else; the signer must emit exactly these):
+Formats chosen where the signer's own protocol (built outside this repository) is silent (the plugin refuses anything
+else; the signer must emit exactly these):
 
 1. Framing: the answer object is followed only by ``\\n``; no whitespace before or after it (no CR, blank or tab).
    The signer closes the connection right after that newline: the client reads to EOF, so a byte after it is
    ``AnswerNotJson`` and a connection held open ends in ``SignerTimeout`` (10 s; ``enrol`` 340 s).
-2. Request ``rid``: exactly 32 lower-case hex (the brief allows 16..32).
+2. Request ``rid``: exactly 32 lower-case hex (the signer's own protocol allows 16..32).
 3. Times: exactly ``YYYY-MM-DDTHH:MM:SSZ`` and a real calendar time (no fraction, offset, lower case or ``:60``).
 4. Counts (``number``, ``crl_number``, ``attempts``, ``devices_on_previous``, ``retry_after_s``): a JSON integer
    0..2^63-1 (no float, no ``true``).
@@ -34,8 +35,8 @@ Formats chosen where the brief is silent (the plugin refuses anything else; the 
 12. Errors: any of the 14 codes on any op (each is a refusal). ``retry_after_s`` only with ``rate_limited``;
     ``registry_revoked`` only with ``crl_failed`` on ``revoke`` and only ``true``; both optional.
 13. ``revoke`` echoes the requested ``device_id``; every object has exactly its keys at every level.
-14. Answers (the brief says this only of requests): no duplicate keys, no ``NaN``/``Infinity``, ``v`` the JSON
-    integer 1 (not ``1.0``/``true``); ``ca_id`` exactly 16 lower-case hex.
+14. Answers (the signer's own protocol says this only of requests): no duplicate keys, no ``NaN``/``Infinity``, ``v``
+    the JSON integer 1 (not ``1.0``/``true``); ``ca_id`` exactly 16 lower-case hex.
 
 Error tree: ``SignerError`` → ``RequestRefused`` (``UnknownOp``, ``InvalidField``, ``RequestTooLarge``) /
 ``AnswerRejected`` (``AnswerTooLarge``, ``AnswerNotJson``, ``RidMismatch``, ``AnswerSchemaError``) / ``SignerRefusal``.

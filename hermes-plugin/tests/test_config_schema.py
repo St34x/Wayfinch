@@ -51,7 +51,7 @@ def test_schema_covers_every_key_and_defaults_match():
     assert set(props) == set(gcfg.DEFAULTS)
     for key, default in gcfg.DEFAULTS.items():
         assert props[key]["default"] == default, key
-    for section in ("long_answers", "signer"):
+    for section in ("long_answers", "signer", "edge"):
         nested = {k: v["default"] for k, v in props[section]["properties"].items()}
         assert nested == gcfg.DEFAULTS[section], section
 
@@ -170,9 +170,10 @@ def plant(path: str, value):
 
 
 PLANTED = [
-    ("host", "0.0.0.0", "host", "loopback"),
-    ("port", "8765", "port", "integer 1-65535"),
-    ("bridge_port", 8765, "bridge_port", "must differ from port"),
+    ("edge.socket", "relative/edge.sock", "edge.socket", "absolute path"),
+    ("edge.socket", "/run/../edge.sock", "edge.socket", "without a .. component"),
+    ("edge.user", "root", "edge.user", "other than root"),
+    ("bridge_port", 0, "bridge_port", "integer 1-65535"),
     ("public_url", f"https://user:{SECRET}@glasses.example.com/ws", "public_url", "wss://"),
     ("lanes", ["assistant", "Work"], "lanes[1]", "lane name"),
     ("lanes", ["assistant", "work", "work"], "lanes", "must not repeat"),
@@ -214,18 +215,18 @@ def test_nested_unknown_key_suggestion():
 @pytest.mark.parametrize(
     "value,shown",
     [
-        ("0.0.0.0", '"0.0.0.0"'),
-        ("::", '"::"'),
-        ("192.0.2.10", '"192.0.2.10"'),
-        ("localhost", '"localhost"'),
+        ("root", '"root"'),
+        ("Edge", '"Edge"'),
+        ("0", '"0"'),
+        ("1000", '"1000"'),
         (8765, "8765"),
-        (None, "null"),
-        (["127.0.0.1"], "a list of 1 item"),
+        (True, "true"),
+        (["edge"], "a list of 1 item"),
     ],
 )
-def test_non_loopback_host_refused_and_shown(value, shown):
-    (msg,) = gcfg.check({"host": value}).errors
-    assert msg.startswith("host: ") and f"(got {shown})" in msg
+def test_bad_edge_user_refused_and_shown(value, shown):
+    (msg,) = gcfg.check({"edge": {"user": value}}).errors
+    assert msg.startswith("edge.user: ") and f"(got {shown})" in msg
 
 
 @pytest.mark.parametrize(
@@ -261,14 +262,14 @@ def test_long_echo_is_truncated():
 
 @pytest.mark.parametrize("value", [8765.0, True, float("nan"), "8765", 2**70])
 def test_integers_are_strict(value):
-    (msg,) = gcfg.check({"port": value}).errors
-    assert msg.startswith("port: must be an integer 1-65535")
+    (msg,) = gcfg.check({"bridge_port": value}).errors
+    assert msg.startswith("bridge_port: must be an integer 1-65535")
 
 
 def test_every_error_is_reported_once_per_path():
     result = gcfg.check({
-        "host": "0.0.0.0",
-        "port": "x",
+        "edge": {"socket": "x"},
+        "bridge_port": "x",
         "lanes": ["A", "b c"],
         "signer": {"user": 1},
         "long_answers": {"platform": "Glasses"},
@@ -276,8 +277,8 @@ def test_every_error_is_reported_once_per_path():
     })
     paths = [e.split(":", 1)[0] for e in result.errors]
     assert sorted(paths) == sorted([
-        "host",
-        "port",
+        "edge.socket",
+        "bridge_port",
         "lanes[0]",
         "lanes[1]",
         "signer.user",
@@ -314,5 +315,5 @@ def test_meeting_section_reserved_and_validated():
 def test_validate_config_logs_glasses_prefixed_messages(caplog, no_allow_all):
     import glasses
 
-    assert glasses.validate_config({"extra": {"host": "0.0.0.0"}}) is False
-    assert any("glasses.host: must be a loopback IP literal" in r.getMessage() for r in caplog.records)
+    assert glasses.validate_config({"extra": {"bridge_port": 0}}) is False
+    assert any("glasses.bridge_port: must be an integer 1-65535" in r.getMessage() for r in caplog.records)

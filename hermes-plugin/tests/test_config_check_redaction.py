@@ -39,7 +39,8 @@ ECHO = echo_paths(gcfg.schema())
 def test_echo_fields_are_the_expected_names_and_paths():
     names = {".".join(p) for p, _ in ECHO}
     assert names == {
-        "host",
+        "edge.socket",
+        "edge.user",
         "state_dir",
         "lanes",
         "home_lane",
@@ -77,8 +78,8 @@ def test_credential_capable_meeting_fields_never_echo(meeting):
 
 
 def test_plain_names_are_still_echoed():
-    (msg,) = gcfg.check({"host": "0.0.0.0"}).errors
-    assert '(got "0.0.0.0")' in msg
+    (msg,) = gcfg.check({"edge": {"user": "root"}}).errors
+    assert '(got "root")' in msg
     assert gcfg.describe("a@b", True) == "a string of 3 characters"
     assert gcfg.describe("s3://x", True) == "a string of 6 characters"
 

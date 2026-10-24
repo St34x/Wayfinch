@@ -15,7 +15,7 @@ from jsonschema import Draft202012Validator
 
 from glasses import envelope_rules
 from glasses.envelope import FrameRejected, InvalidFrame, decode, error_frame
-from glasses.envelope_rules import Violation, violation
+from glasses.envelope_rules import UNNUMBERED_S2D, Violation, violation
 
 PROTOCOL = Path(__file__).resolve().parents[2] / "protocol"
 SCHEMA = json.loads((PROTOCOL / "envelope.schema.json").read_text(encoding="utf-8"))
@@ -94,7 +94,7 @@ def test_every_integer_field_of_the_schema_refuses_a_float_spelling() -> None:
     hint_with_ttl["body"]["ttlMs"] = 10_000  # the one optional integer field no valid fixture sets
     frames = [load(f"valid/{path.name}") for path in sorted((PROTOCOL / "fixtures" / "valid").glob("*.json"))]
     for frame in [*frames, hint_with_ttl]:
-        from_device = "seq" not in frame
+        from_device = "seq" not in frame and frame["type"] not in UNNUMBERED_S2D
         assert violation(frame, from_device=from_device) is None, frame["type"]
         for slot, container, key in list(integer_slots(frame, "", frame["type"])):
             container[key] = float(container[key])

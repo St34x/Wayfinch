@@ -29,8 +29,8 @@ def pc(extra=None, enabled=True):
 def test_validate_config_accepts_dict_and_object(no_allow_all):
     assert glasses.validate_config(pc({})) is True
     assert glasses.validate_config(pc(None)) is True
-    assert glasses.validate_config({"extra": {"host": "::1"}}) is True
-    assert glasses.validate_config({"extra": {"host": "0.0.0.0"}}) is False
+    assert glasses.validate_config({"extra": {"bridge_port": 9000}}) is True
+    assert glasses.validate_config({"extra": {"bridge_port": 0}}) is False
 
 
 def test_validate_config_never_raises(no_allow_all):
@@ -51,14 +51,14 @@ def test_allow_all_empty_is_ignored(monkeypatch):
 
 def test_validate_config_logs_reasons(caplog, no_allow_all):
     with caplog.at_level("WARNING"):
-        assert glasses.validate_config(pc({"host": "0.0.0.0"})) is False
-    assert "host:" in caplog.text and "loopback" in caplog.text
+        assert glasses.validate_config(pc({"bridge_port": 0})) is False
+    assert "bridge_port:" in caplog.text and "1-65535" in caplog.text
 
 
 def test_is_connected(no_allow_all):
     assert glasses.is_connected(pc({}, enabled=True)) is True
     assert glasses.is_connected(pc({}, enabled=False)) is False
-    assert glasses.is_connected(pc({"host": "0.0.0.0"}, enabled=True)) is False
+    assert glasses.is_connected(pc({"bridge_port": 0}, enabled=True)) is False
 
 
 # --------------------------------------------------------------------------------------------
@@ -85,7 +85,7 @@ def test_check_requirements_is_passive_and_bool(monkeypatch):
 # registration with the gateway
 # --------------------------------------------------------------------------------------------
 
-# PlatformEntry fields at the pinned Hermes a4648c5f58 (gateway/platform_registry.py:43-112);
+# PlatformEntry fields at the pinned Hermes d923a5eb48 (gateway/platform_registry.py:43-120);
 # register_platform() forwards extra kwargs to PlatformEntry and unknown keys raise TypeError.
 PLATFORM_ENTRY_FIELDS = {
     "name",
@@ -114,6 +114,9 @@ PLATFORM_ENTRY_FIELDS = {
     "validate_target_ref_fn",
     "send_message_handler",
     "standalone_sender_fn",
+    "trusted_inbound",
+    "display_tier",
+    "shared_env_prefixes",
 }
 
 
@@ -163,8 +166,11 @@ def test_register_platform_glasses():
     assert call["validate_config"] is glasses.validate_config
     assert call["is_connected"] is glasses.is_connected
     assert call["allowed_users_env"] == "GLASSES_ALLOWED_USERS"
-    # Never registered: the gateway honours a registered allow_all_env per event (authz_mixin.py:645-651).
+    # Never registered: the gateway honours a registered allow_all_env per event (authz_mixin.py:646-652).
     assert "allow_all_env" not in call
+    # Likewise trusted_inbound: an entry with it admits every sender before any allowlist
+    # (authz_mixin.py:631-634); Hermes refuses it only for core platform names (plugins.py:788-789).
+    assert "trusted_inbound" not in call
     assert call["max_message_length"] == gcfg.MAX_MESSAGE_LENGTH
     assert isinstance(call["platform_hint"], str) and call["platform_hint"].strip()
     assert call["allow_update_command"] is False

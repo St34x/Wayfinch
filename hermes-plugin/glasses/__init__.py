@@ -94,8 +94,8 @@ def register(ctx: PluginContext) -> None:
         is_connected=is_connected,
         allowed_users_env=ALLOWED_USERS_ENV,
         # allow_all_env deliberately absent: registering it makes the gateway honour the switch
-        # per event (gateway/authz_mixin.py:645-651).
-        # send_message tool chunk size (tools/send_message_tool.py:603-618); the adapter class
+        # per event (gateway/authz_mixin.py:646-652).
+        # send_message tool chunk size (tools/send_message_tool.py:605-620); the adapter class
         # carries the same value as MAX_MESSAGE_LENGTH for the gateway's own chunking (config.py).
         max_message_length=MAX_MESSAGE_LENGTH,
         platform_hint=PLATFORM_HINT,

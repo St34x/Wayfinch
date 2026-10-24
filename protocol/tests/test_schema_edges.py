@@ -75,6 +75,12 @@ def test_keepalive_never_carries_seq(validator, type_):
     assert_invalid(validator, frame(type_, seq=1))
 
 
+def test_welcome_is_outside_the_numbering_and_never_carries_seq(validator):
+    assert_valid(validator, frame("welcome"))
+    assert_invalid(validator, frame("welcome", seq=1))
+    assert_invalid(validator, frame("welcome", seq=7))
+
+
 def test_error_seq_optional(validator):
     assert_valid(validator, frame("error"))
     assert_valid(validator, frame("error", body={"code": "outbox_overflow", "message": "dropped 3"}, seq=9))

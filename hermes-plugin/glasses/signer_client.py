@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Socket client of the device-CA signer, the only plugin code that talks to it (the wire format is
 ``signer_protocol``; this module adds the socket, the checks and the deadlines). Callers today: ``glasses-admin crl``
-(``admin_crl``) and the ``/enroll`` relay (``enroll``; built, mounted on the HTTP app by T1.07, planned).
+(``admin_crl``) and the ``/enroll`` relay (``enroll``; mounted on the HTTP app by ``server.py``, T1.07c).
 
 * ``client_from_config(cfg)`` builds a ``SignerClient`` from ``signer.socket`` and ``signer.user``. A key that is not
   set raises ``NotConfigured`` naming it; a user that is unknown, root or the plugin's own user raises
@@ -13,7 +13,7 @@
 * Every call, before a byte is sent: ``lstat`` of the socket path (a symlink, a non-socket or an owner other than the
   signer user raises ``SocketRefused``; only the last path component is checked), connect, then the peer uid from
   ``SO_PEERCRED`` (another uid raises ``PeerRefused``). Then one request line, and the answer read until the signer
-  closes (brief section 4: one line, then close): a byte after the newline is refused (``AnswerNotJson``), and a
+  closes (signer protocol: one line, then close): a byte after the newline is refused (``AnswerNotJson``), and a
   signer that keeps the connection open runs into the deadline.
 * One deadline per call, from connect to the end of the answer: connect at most 2 s, ``enrol`` 340 s, every other op
   10 s (``SignerTimeout``). No call is retried; the caller decides. Every failure is a ``SignerError`` kind raised
@@ -247,16 +247,21 @@ def _setting(value: str, key: str) -> str:
     return value
 
 
-def client_from_config(cfg: GlassesConfig) -> SignerClient:
-    """The client for ``signer.socket`` and ``signer.user``; typed errors when either is unusable."""
-    path, user = _setting(cfg.signer_socket, "signer.socket"), _setting(cfg.signer_user, "signer.user")
+def signer_user_uid(cfg: GlassesConfig) -> int:
+    """The uid of ``signer.user``; ``SignerUserRefused`` when it is unknown, root or the plugin's own user."""
     try:
-        uid = pwd.getpwnam(user).pw_uid
+        uid = pwd.getpwnam(_setting(cfg.signer_user, "signer.user")).pw_uid
     except KeyError:
         uid = None
     if uid is None or uid in (0, os.geteuid()):
         raise SignerUserRefused
-    return SignerClient(Path(path), uid)
+    return uid
+
+
+def client_from_config(cfg: GlassesConfig) -> SignerClient:
+    """The client for ``signer.socket`` and ``signer.user``; typed errors when either is unusable."""
+    path = _setting(cfg.signer_socket, "signer.socket")
+    return SignerClient(Path(path), signer_user_uid(cfg))
 
 
 def _public_dir(cfg: GlassesConfig) -> Path:

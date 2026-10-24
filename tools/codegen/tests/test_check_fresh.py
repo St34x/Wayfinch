@@ -44,7 +44,7 @@ def _copy(tmp_path: Path) -> Path:
 def test_real_generated_directory_is_fresh() -> None:
     done = _check(sys.executable)
     assert done.returncode == 0, done.stdout + done.stderr
-    assert "matches the generator (2 files)" in done.stdout
+    assert "matches the generator (3 files)" in done.stdout
 
 
 def test_untouched_copy_and_interpreter_cache_pass(tmp_path: Path) -> None:
@@ -65,8 +65,20 @@ def test_untouched_copy_and_interpreter_cache_pass(tmp_path: Path) -> None:
         (lambda d: (d / "protocol_types.py").unlink(), "protocol_types.py"),
         (lambda d: _append(d / "protocol_types.py", "\n"), "+++"),
         (lambda d: _append(d / "__init__.py", "x = 1\n"), "-x = 1"),
+        (lambda d: _append(d / "envelope.schema.json", " "), "+++"),
+        (lambda d: (d / "envelope.schema.json").unlink(), "envelope.schema.json"),
     ],
-    ids=["hand-written", "extra-file", "extra-subdir", "missing-init", "missing-module", "edited", "edited-init"],
+    ids=[
+        "hand-written",
+        "extra-file",
+        "extra-subdir",
+        "missing-init",
+        "missing-module",
+        "edited",
+        "edited-init",
+        "edited-schema-copy",
+        "missing-schema-copy",
+    ],
 )
 def test_extra_missing_or_edited_file_fails(tmp_path: Path, damage: Damage, expected: str) -> None:
     copy = _copy(tmp_path)

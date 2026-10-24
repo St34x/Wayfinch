@@ -37,6 +37,8 @@ class CodegenError(Exception):
 @dataclass(frozen=True)
 class Scalar:
     name: str  # "str" | "int" | "bool"
+    minimum: int | None = None  # inclusive schema bounds of an "int"; only the Kotlin emitter reads them
+    maximum: int | None = None
 
 
 @dataclass(frozen=True)
@@ -135,6 +137,13 @@ def _literal(value: object, path: str) -> LiteralValue:
     return value
 
 
+def _bound(node: Json, key: str, path: str) -> int | None:
+    value = node.get(key)
+    if value is not None and (isinstance(value, bool) or not isinstance(value, int)):
+        raise CodegenError(f"{path}/{key}: an integer bound must be an integer")
+    return value
+
+
 def _declared(names: list[str], path: str, declared: frozenset[str]) -> None:
     for name in names:
         if name not in declared:
@@ -161,6 +170,8 @@ class TypeBuilder:
             return self.struct(node, path, hint)
         if kind == "array":
             return ListOf(self.type_of(as_object(node.get("items"), f"{path}/items"), f"{path}/items", hint + "Item"))
+        if kind == "integer":
+            return Scalar("int", _bound(node, "minimum", path), _bound(node, "maximum", path))
         if isinstance(kind, str) and kind in SCALARS:
             return Scalar(SCALARS[kind])
         raise CodegenError(f"{path}/type: unsupported or missing type {kind!r}")

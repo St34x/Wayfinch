@@ -23,10 +23,11 @@ gateway:
     glasses:
       enabled: true
       extra:
-        host: 127.0.0.1                  # loopback only; your TLS edge proxies to it
-        port: 8765
-        bridge_port: 8766
+        bridge_port: 8766                # loopback port of the phone bridge (planned)
         state_dir: ""                    # empty = $HERMES_HOME/glasses (mode 0700)
+        edge:                            # /ws and /enroll are served on this unix socket only, never on TCP
+          socket: /run/hermes-glasses/edge.sock  # made mode 0660; the directory must be writable for the gateway service
+          user: edge-proxy               # the TLS edge's system user: the only peer uid admitted on the socket
         public_url: wss://glasses.example.com/ws
         lanes: [assistant, work]
         home_lane: assistant

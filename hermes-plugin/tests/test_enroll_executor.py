@@ -15,7 +15,20 @@ import time
 import enroll_helpers
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
-from enroll_helpers import BODY, CODE, SIG, SPKI, app_with, factory, mocked, post, relay_for, send, status_of
+from enroll_helpers import (
+    BODY,
+    CODE,
+    SIG,
+    SPKI,
+    app_with,
+    factory,
+    is_loopback_peer,
+    mocked,
+    post,
+    relay_for,
+    send,
+    status_of,
+)
 from fake_signer import Script
 
 from glasses.enroll import MAX_IN_FLIGHT, EnrollRelay, RateLimiter
@@ -56,7 +69,7 @@ def test_the_signer_call_runs_in_a_glasses_enroll_thread(fake):
         names.append(threading.current_thread().name)
         return inner()
 
-    relay = EnrollRelay(recording, limiter=RateLimiter(per_minute=1000))  # type: ignore[arg-type]
+    relay = EnrollRelay(recording, peer_allowed=is_loopback_peer, limiter=RateLimiter(per_minute=1000))  # type: ignore[arg-type]
     assert post(relay).status == 200
     assert len(names) == 1 and names[0].startswith("glasses-enroll")
 
@@ -104,7 +117,7 @@ class Stub:
 @pytest.mark.parametrize("seed", [1, 2, 3])
 def test_about_half_cancelled_requests_end_with_no_slot_held(seed):
     rng = random.Random(seed)  # noqa: S311 - a reproducible schedule, not a secret
-    relay = EnrollRelay(lambda: Stub(rng), limiter=RateLimiter(per_minute=10**6))  # type: ignore[arg-type]
+    relay = EnrollRelay(lambda: Stub(rng), peer_allowed=is_loopback_peer, limiter=RateLimiter(per_minute=10**6))  # type: ignore[arg-type]
     body = json.dumps(BODY).encode()
 
     async def main() -> list[object]:
