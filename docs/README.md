@@ -25,6 +25,8 @@ fails when one is not (or when a link or `#anchor` does not resolve). Start with
 
 - [Contributing](../CONTRIBUTING.md) — standards, checks before a pull request, task ids, commit messages, sign-off.
 - [Engineering standards](../ENGINEERING.md) — limits, boundaries, typing, tests, docs rules and the gate table.
+- [Rules for coding agents and contributors](../AGENTS.md) — the short form: repo map, test commands, what blocks a
+  change, security, naming and commit rules.
 - [Integration test instance](test-hermes.md) — the pinned Hermes Agent used for integration tests.
 - [Make-target reference](reference/make-targets.md) — every make target and what it does (generated from the `#:`
   lines of the `Makefile` and `mk/*.mk`).

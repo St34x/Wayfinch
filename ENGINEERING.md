@@ -12,7 +12,8 @@ rules whose gates are not built yet (module boundaries, coverage). The Kotlin st
 explicit API, the text rules) and the generated-types gate are live in `make test-android` (needs a JDK and the Android
 SDK); `make test` does not run them.
 Reviewers use this file as their checklist: a size/complexity violation is a **should-fix**, a dependency-direction
-(boundary) violation is a **blocker**.
+(boundary) violation is a **blocker**. The short form for coding agents and contributors, with what blocks a merge and
+what is only a follow-up, is [AGENTS.md](AGENTS.md).
 
 ## 1. Architecture: ports and adapters
 
@@ -82,7 +83,9 @@ an external signature (a fake of a framework API) may exceed the parameter limit
 - Commit messages: `T<id>: <what changed>` for task work (e.g. `T1.06: reject lone surrogates in the codec`);
   other commits use a lower-case prefix (the prefixes for contributors are listed in `CONTRIBUTING.md`; the gate's
   full list is `SUBJECT_PREFIXES` in `tools/quality/check_hygiene.py`) _(gate: `check_hygiene.py --commits` over the
-  range after `tools/quality/commit-gate-start.txt`; run at merge time until CI runs it)_.
+  range after `tools/quality/commit-gate-start.txt`; run at merge time until CI runs it)_. Every commit is signed off
+  (`git commit -s`, a `Signed-off-by:` trailer as the last body line; `CONTRIBUTING.md`); no gate checks the trailer
+  yet (planned).
 - **No `TODO`/`FIXME` without a task id**: `TODO(T1.23): …` _(gate)_. The one exemption is vendored upstream code: the
   three bare marker comments of the upstream file `android/third_party/g2-driver/.../sgcs/G2.kt`, matched by exact
   comment text (`VENDORED_MARKER_LINES` in `tools/quality/check_hygiene.py`). Any other marker in that file, any
@@ -235,6 +238,8 @@ an external signature (a fake of a framework API) may exceed the parameter limit
   key, default, limit, protocol field, file path or user-visible behaviour updates every document that states it in
   the same commit. Missing or stale documentation is a **should-fix** review finding (changes requested), never a
   later "docs task".
+- **Docs state what the code does today.** Anything designed but not built is marked planned in the same sentence; a
+  gate is called live only when its make target runs it. An aspirational claim counts as stale documentation.
 - **Generate references, do not copy them.** Where a source of truth exists, the reference is generated from it and
   checked for freshness: configuration from `hermes-plugin/glasses/config.schema.json` (`docs/reference/config.md`),
   protocol types from `protocol/envelope.schema.json`, make targets from `mk/*.mk`, CLI subcommands from the CLI

@@ -10,7 +10,9 @@ Everyone taking part in the project follows the [Code of Conduct](CODE_OF_CONDUC
 
 [ENGINEERING.md](ENGINEERING.md) is the rule set: ports and adapters with a pure core, size and complexity limits,
 typing, tests, error handling, dependencies and documentation. Reviews use it as the checklist. Please read it once.
-The gates enforce most of it.
+The gates enforce most of it. [AGENTS.md](AGENTS.md) is the short form (also for coding agents): only a blocking
+finding holds a pull request (access that must not exist, a leaked secret or data, destroyed data, a broken feature,
+a dependency-direction violation, a red gate); everything else is a follow-up.
 
 ## Before you open a pull request
 

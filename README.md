@@ -189,6 +189,7 @@ deploy/examples/        example plugin configuration (example.com values)
 docs/                   architecture, admin CLI, dependency ledger, glossary, configuration and make-target references,
                         test-instance setup, troubleshooting
 ENGINEERING.md          engineering standards
+AGENTS.md               short rules for coding agents and contributors
 ```
 
 ## Quick start for contributors
@@ -216,6 +217,7 @@ instance (`make test-hermes-up` / `make test-hermes-down`) needs a pinned Hermes
 venv, and is not part of `make test`; setup: [docs/test-hermes.md](docs/test-hermes.md).
 
 Contribution rules: [CONTRIBUTING.md](CONTRIBUTING.md). Code of conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+Short rules for coding agents and contributors: [AGENTS.md](AGENTS.md).
 
 ## Roadmap
 
